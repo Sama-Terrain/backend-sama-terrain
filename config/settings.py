@@ -49,6 +49,9 @@ INSTALLED_APPS = [
     'authentification',
 ]
 
+# On utilise notre propre modèle User (email au lieu de username, + rôle)
+AUTH_USER_MODEL = 'authentification.User'
+
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
