@@ -30,4 +30,6 @@ echo "Collecte des fichiers statiques..."
 python manage.py collectstatic --noinput
 
 echo "Démarrage du serveur..."
-exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3
+# --reload : redémarre automatiquement quand un fichier .py change (pratique
+# en dev grâce au volume monté sur le code). À retirer en production.
+exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --reload

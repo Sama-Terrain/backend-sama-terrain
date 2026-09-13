@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
+    'corsheaders',
 
     #documentation
     'drf_spectacular',
@@ -84,6 +85,14 @@ IA_SERVICE_URL = config('IA_SERVICE_URL', default='http://127.0.0.1:8001')
 # après paiement (success_url / cancel_url envoyés à PayTech).
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 
+# Autorise le frontend (autre origine : port différent) à appeler cette API
+# depuis le navigateur. Sans ça, le navigateur bloque les requêtes (erreur CORS).
+CORS_ALLOWED_ORIGINS = [
+    FRONTEND_URL,
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+]
+
 # URL publique de CE backend, utilisée pour construire l'ipn_url envoyée à
 # PayTech (PayTech doit pouvoir nous appeler depuis Internet).
 BACKEND_URL = config('BACKEND_URL', default='http://127.0.0.1:8000')
@@ -112,6 +121,8 @@ SPECTACULAR_SETTINGS = {
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # Doit être placé le plus haut possible, avant CommonMiddleware.
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',

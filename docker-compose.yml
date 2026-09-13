@@ -37,6 +37,10 @@ services:
     ports:
       - "8000:8000"
     volumes:
+      # Monte le code depuis l'hôte : modifier un fichier Python ici prend
+      # effet dans le conteneur sans avoir à reconstruire l'image (pratique
+      # en dev). En production, on retirerait cette ligne (code figé au build).
+      - .:/app
       # Les fichiers uploadés (photos de terrains, documents gérants...)
       # survivent aux redémarrages du conteneur.
       - media_data:/app/media
