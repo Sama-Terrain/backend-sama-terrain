@@ -1,3 +1,9 @@
 from django.contrib import admin
 
-# Les modèles seront enregistrés ici pour être visibles dans l'admin Django.
+from .models import Creneau
+
+
+@admin.register(Creneau)
+class CreneauAdmin(admin.ModelAdmin):
+    list_display = ['terrain', 'date', 'heure_debut', 'heure_fin', 'prix', 'statut']
+    list_filter = ['statut', 'date']

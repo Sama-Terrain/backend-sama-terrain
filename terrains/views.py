@@ -3,6 +3,8 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from creneaux.models import Creneau
+
 from .models import Terrain, TerrainPhoto
 from .permissions import EstGerantOuLectureSeule, EstProprietaireDuTerrain
 from .serializers import (
@@ -31,9 +33,16 @@ class TerrainListCreateView(APIView):
         if ville:
             terrains = terrains.filter(ville__iexact=ville)
 
-        # NB : les filtres "date" et "heure" (ne montrer que les terrains
-        # ayant un créneau libre à ce moment-là) seront ajoutés une fois
-        # l'app "creneaux" construite, car ils dépendent de son modèle.
+        # Filtre par date/heure : ne garder que les terrains ayant un
+        # créneau DISPONIBLE à ce moment précis.
+        # Ex: /api/terrains/?date=2026-03-15&heure=18:00
+        date = request.query_params.get('date')
+        heure = request.query_params.get('heure')
+        if date:
+            filtres_creneau = {'creneaux__date': date, 'creneaux__statut': Creneau.Statut.DISPONIBLE}
+            if heure:
+                filtres_creneau['creneaux__heure_debut'] = heure
+            terrains = terrains.filter(**filtres_creneau).distinct()
 
         serializer = TerrainListSerializer(terrains, many=True, context={'request': request})
         return Response(serializer.data)

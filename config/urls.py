@@ -30,6 +30,7 @@ urlpatterns = [
     # Chaque app a ses propres routes, regroupées sous /api/auth/, /api/terrains/, etc.
     path('api/auth/', include('authentification.urls')),
     path('api/terrains/', include('terrains.urls')),
+    path('api/creneaux/', include('creneaux.urls')),
 ]
 
 # En développement, Django sert lui-même les fichiers uploadés (photos...).
