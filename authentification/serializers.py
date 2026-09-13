@@ -142,6 +142,27 @@ class LoginSerializer(TokenObtainPairSerializer):
         return data
 
 
+class LogoutSerializer(serializers.Serializer):
+    """
+    Vérifie qu'un refresh token a bien été fourni, pour pouvoir le
+    mettre sur liste noire (blacklist) et empêcher sa réutilisation.
+    """
+
+    refresh = serializers.CharField()
+
+    def validate_refresh(self, value):
+        try:
+            self.token = RefreshToken(value)
+        except Exception:
+            raise serializers.ValidationError("Refresh token invalide.")
+        return value
+
+    def save(self):
+        # Une fois blacklisté, ce refresh token ne pourra plus jamais
+        # être utilisé pour obtenir un nouvel access token.
+        self.token.blacklist()
+
+
 class GoogleAuthSerializer(serializers.Serializer):
     """
     Connexion OU inscription via Google (bouton "Sign in with Google").

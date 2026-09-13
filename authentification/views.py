@@ -1,5 +1,5 @@
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -7,8 +7,10 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import (
     GoogleAuthSerializer,
     LoginSerializer,
+    LogoutSerializer,
     RegisterSerializer,
     ResendCodeSerializer,
+    UserSerializer,
     VerifyEmailSerializer,
 )
 from .utils import generer_et_envoyer_code
@@ -141,3 +143,39 @@ class GoogleAuthView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(serializer.save(), status=status.HTTP_200_OK)
+
+
+class LogoutView(APIView):
+    """
+    POST /api/auth/logout
+
+    Reçoit {refresh}. Met ce refresh token sur liste noire : il ne pourra
+    plus servir à générer de nouveaux access tokens. Il faut être connecté
+    (access token valide) pour appeler cette route.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = LogoutSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer.save()
+
+        return Response({'message': "Déconnexion réussie."}, status=status.HTTP_200_OK)
+
+
+class MeView(APIView):
+    """
+    GET /api/auth/me
+
+    Renvoie les infos de l'utilisateur actuellement connecté, à partir
+    du token JWT envoyé dans le header Authorization.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
