@@ -74,3 +74,26 @@ class VerifyEmailSerializer(serializers.Serializer):
         # rechercher une deuxième fois.
         data['user'] = user
         return data
+
+
+class ResendCodeSerializer(serializers.Serializer):
+    """
+    Vérifie qu'un renvoi de code est possible pour l'email donné.
+    Ne vérifie PAS de code : elle sert juste à retrouver l'utilisateur
+    avant de lui envoyer un nouveau code.
+    """
+
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        try:
+            user = User.objects.get(email__iexact=value)
+        except User.DoesNotExist:
+            raise serializers.ValidationError("Aucun compte avec cet email.")
+
+        if user.email_verifie:
+            raise serializers.ValidationError("Cet email est déjà vérifié.")
+
+        # On garde l'utilisateur sous la main pour la vue.
+        self.user = user
+        return value

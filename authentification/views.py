@@ -3,7 +3,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .serializers import RegisterSerializer, VerifyEmailSerializer
+from .serializers import RegisterSerializer, ResendCodeSerializer, VerifyEmailSerializer
 from .utils import generer_et_envoyer_code
 
 
@@ -77,3 +77,28 @@ class VerifyEmailView(APIView):
         user.save()
 
         return Response({'message': "Email vérifié avec succès."}, status=status.HTTP_200_OK)
+
+
+class ResendCodeView(APIView):
+    """
+    POST /api/auth/resend-code
+
+    Reçoit {email}. Génère un nouveau code de vérification et le renvoie
+    par email (remplace l'ancien code, même s'il n'avait pas expiré).
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = ResendCodeSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # validate_email() a mis l'utilisateur trouvé sur le serializer.
+        generer_et_envoyer_code(serializer.user)
+
+        return Response(
+            {'message': "Un nouveau code de vérification a été envoyé."},
+            status=status.HTTP_200_OK,
+        )
