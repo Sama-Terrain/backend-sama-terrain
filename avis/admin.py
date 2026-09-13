@@ -1,3 +1,9 @@
 from django.contrib import admin
 
-# Les modèles seront enregistrés ici pour être visibles dans l'admin Django.
+from .models import Avis
+
+
+@admin.register(Avis)
+class AvisAdmin(admin.ModelAdmin):
+    list_display = ['terrain', 'amateur', 'note', 'signale', 'visible', 'cree_le']
+    list_filter = ['signale', 'visible', 'note']

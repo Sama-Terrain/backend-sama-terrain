@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     'reservations',
     'tickets',
     'paiements',
+    'avis',
 ]
 
 # On utilise notre propre modèle User (email au lieu de username, + rôle)
