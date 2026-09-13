@@ -3,7 +3,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .serializers import RegisterSerializer
+from .serializers import RegisterSerializer, VerifyEmailSerializer
 from .utils import generer_et_envoyer_code
 
 
@@ -49,3 +49,31 @@ class RegisterView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+class VerifyEmailView(APIView):
+    """
+    POST /api/auth/verify-email
+
+    Reçoit {email, code}. Si le code est bon et pas expiré, on marque
+    le compte comme vérifié : l'utilisateur peut désormais se connecter.
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = VerifyEmailSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        user = serializer.validated_data['user']
+
+        # Le compte est vérifié : on active email_verifie et on efface le
+        # code pour qu'il ne puisse plus être réutilisé.
+        user.email_verifie = True
+        user.code_verification = None
+        user.code_verification_envoye_le = None
+        user.save()
+
+        return Response({'message': "Email vérifié avec succès."}, status=status.HTTP_200_OK)

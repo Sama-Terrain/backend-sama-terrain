@@ -1,4 +1,7 @@
+from datetime import timedelta
+
 from django.contrib.auth.password_validation import validate_password
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import User
@@ -34,4 +37,40 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 'confirmPassword': "Les mots de passe ne correspondent pas."
             })
+        return data
+
+
+class VerifyEmailSerializer(serializers.Serializer):
+    """
+    Vérifie le code à 6 chiffres reçu par email.
+
+    Ce n'est PAS un ModelSerializer car on ne crée/modifie pas un User
+    directement à partir des données : on doit d'abord aller chercher
+    l'utilisateur par son email, puis comparer le code à la main.
+    """
+
+    email = serializers.EmailField()
+    code = serializers.CharField(max_length=6)
+
+    def validate(self, data):
+        # On cherche l'utilisateur correspondant à l'email envoyé.
+        try:
+            user = User.objects.get(email__iexact=data['email'])
+        except User.DoesNotExist:
+            raise serializers.ValidationError({'email': "Aucun compte avec cet email."})
+
+        if user.email_verifie:
+            raise serializers.ValidationError({'email': "Cet email est déjà vérifié."})
+
+        if user.code_verification != data['code']:
+            raise serializers.ValidationError({'code': "Code de vérification incorrect."})
+
+        # Le code n'est valable que 15 minutes après son envoi.
+        expire = user.code_verification_envoye_le + timedelta(minutes=15)
+        if timezone.now() > expire:
+            raise serializers.ValidationError({'code': "Ce code a expiré, demandez-en un nouveau."})
+
+        # On transmet l'utilisateur trouvé à la vue, pour éviter de le
+        # rechercher une deuxième fois.
+        data['user'] = user
         return data
