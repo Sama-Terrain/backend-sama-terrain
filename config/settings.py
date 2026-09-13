@@ -10,8 +10,10 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
 from decouple import config
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -41,6 +43,7 @@ INSTALLED_APPS = [
 
     #api
     'rest_framework',
+    'rest_framework_simplejwt',
 
     #documentation
     'drf_spectacular',
@@ -54,6 +57,18 @@ AUTH_USER_MODEL = 'authentification.User'
 
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    # Toutes les vues protégées attendent un token JWT dans le header :
+    # Authorization: Bearer <access_token>
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+}
+
+SIMPLE_JWT = {
+    # Durée de vie du token d'accès (utilisé à chaque requête)
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
+    # Durée de vie du token de rafraîchissement (pour obtenir un nouvel access token)
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
 }
 
 SPECTACULAR_SETTINGS = {

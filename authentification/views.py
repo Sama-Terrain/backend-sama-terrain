@@ -2,8 +2,14 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.views import TokenObtainPairView
 
-from .serializers import RegisterSerializer, ResendCodeSerializer, VerifyEmailSerializer
+from .serializers import (
+    LoginSerializer,
+    RegisterSerializer,
+    ResendCodeSerializer,
+    VerifyEmailSerializer,
+)
 from .utils import generer_et_envoyer_code
 
 
@@ -102,3 +108,15 @@ class ResendCodeView(APIView):
             {'message': "Un nouveau code de vérification a été envoyé."},
             status=status.HTTP_200_OK,
         )
+
+
+class LoginView(TokenObtainPairView):
+    """
+    POST /api/auth/login
+
+    Reçoit {email, password}. Si c'est correct et que l'email est vérifié,
+    renvoie {access, refresh, role, user}.
+    """
+
+    permission_classes = [AllowAny]
+    serializer_class = LoginSerializer

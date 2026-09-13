@@ -3,8 +3,20 @@ from datetime import timedelta
 from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from .models import User
+
+
+class UserSerializer(serializers.ModelSerializer):
+    """
+    Représente un utilisateur dans les réponses de l'API (login, /me, ...).
+    Ne contient jamais le mot de passe.
+    """
+
+    class Meta:
+        model = User
+        fields = ['id', 'email', 'prenom', 'nom', 'role']
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -97,3 +109,30 @@ class ResendCodeSerializer(serializers.Serializer):
         # On garde l'utilisateur sous la main pour la vue.
         self.user = user
         return value
+
+
+class LoginSerializer(TokenObtainPairSerializer):
+    """
+    Connexion par email + mot de passe.
+
+    On part du serializer fourni par SimpleJWT (qui sait déjà vérifier
+    le mot de passe et créer les tokens), et on ajoute juste :
+    - le refus de connexion si l'email n'est pas encore vérifié
+    - le rôle et les infos utilisateur dans la réponse
+    """
+
+    def validate(self, attrs):
+        # `super().validate()` vérifie l'email/mot de passe et prépare les
+        # tokens. Si les identifiants sont mauvais, elle lève déjà une erreur.
+        data = super().validate(attrs)
+
+        if not self.user.email_verifie:
+            raise serializers.ValidationError(
+                "Votre email n'est pas encore vérifié. Vérifiez votre boîte mail."
+            )
+
+        # On ajoute le rôle et les infos utilisateur à côté des tokens,
+        # pour que le frontend sache qui est connecté sans appel supplémentaire.
+        data['role'] = self.user.role
+        data['user'] = UserSerializer(self.user).data
+        return data
