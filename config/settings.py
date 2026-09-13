@@ -51,6 +51,7 @@ INSTALLED_APPS = [
 
     #apps
     'authentification',
+    'terrains',
 ]
 
 # On utilise notre propre modèle User (email au lieu de username, + rôle)
@@ -158,6 +159,10 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Fichiers uploadés par les utilisateurs (photos de terrains, etc.)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 
 # Email
