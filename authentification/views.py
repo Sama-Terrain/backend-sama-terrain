@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .serializers import (
+    GoogleAuthSerializer,
     LoginSerializer,
     RegisterSerializer,
     ResendCodeSerializer,
@@ -120,3 +121,23 @@ class LoginView(TokenObtainPairView):
 
     permission_classes = [AllowAny]
     serializer_class = LoginSerializer
+
+
+class GoogleAuthView(APIView):
+    """
+    POST /api/auth/google
+
+    Reçoit {credential} (le jeton fourni par le bouton Google). Connecte
+    l'utilisateur s'il existe déjà, ou crée son compte automatiquement.
+    Renvoie la même forme de réponse que /api/auth/login.
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = GoogleAuthSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(serializer.save(), status=status.HTTP_200_OK)

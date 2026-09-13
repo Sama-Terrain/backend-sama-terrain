@@ -55,6 +55,10 @@ INSTALLED_APPS = [
 # On utilise notre propre modèle User (email au lieu de username, + rôle)
 AUTH_USER_MODEL = 'authentification.User'
 
+# Identifiant client Google, utilisé pour vérifier les jetons envoyés
+# par le bouton "Sign in with Google" du frontend.
+GOOGLE_CLIENT_ID = config('IDCLIENT')
+
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     # Toutes les vues protégées attendent un token JWT dans le header :

@@ -1,9 +1,13 @@
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import User
 
@@ -136,3 +140,61 @@ class LoginSerializer(TokenObtainPairSerializer):
         data['role'] = self.user.role
         data['user'] = UserSerializer(self.user).data
         return data
+
+
+class GoogleAuthSerializer(serializers.Serializer):
+    """
+    Connexion OU inscription via Google (bouton "Sign in with Google").
+
+    Le frontend envoie le "credential" fourni par Google (un jeton signé
+    par Google qui prouve l'identité de l'utilisateur). On demande à
+    Google de vérifier ce jeton, puis :
+    - si un compte existe déjà avec cet email -> on connecte
+    - sinon -> on crée le compte automatiquement (email déjà vérifié par Google)
+    """
+
+    credential = serializers.CharField()
+
+    def validate_credential(self, value):
+        try:
+            # google-auth vérifie la signature du jeton et qu'il a bien été
+            # émis pour NOTRE application (IDCLIENT dans le .env).
+            payload = google_id_token.verify_oauth2_token(
+                value,
+                google_requests.Request(),
+                settings.GOOGLE_CLIENT_ID,
+            )
+        except ValueError:
+            raise serializers.ValidationError("Jeton Google invalide.")
+
+        return payload
+
+    def save(self):
+        payload = self.validated_data['credential']
+        email = payload['email']
+
+        user, cree = User.objects.get_or_create(
+            email__iexact=email,
+            defaults={
+                'username': email,
+                'email': email,
+                'prenom': payload.get('given_name', ''),
+                'nom': payload.get('family_name', ''),
+                # Google a déjà vérifié cet email, pas besoin d'un code.
+                'email_verifie': True,
+            },
+        )
+
+        if cree:
+            # Ce compte ne se connectera jamais avec un mot de passe classique.
+            user.set_unusable_password()
+            user.save()
+
+        # On génère les mêmes tokens JWT que pour une connexion classique.
+        refresh = RefreshToken.for_user(user)
+        return {
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'role': user.role,
+            'user': UserSerializer(user).data,
+        }
