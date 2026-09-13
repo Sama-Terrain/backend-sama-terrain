@@ -54,6 +54,8 @@ INSTALLED_APPS = [
     'terrains',
     'creneaux',
     'reservations',
+    'tickets',
+    'paiements',
 ]
 
 # On utilise notre propre modèle User (email au lieu de username, + rôle)
@@ -62,6 +64,25 @@ AUTH_USER_MODEL = 'authentification.User'
 # Identifiant client Google, utilisé pour vérifier les jetons envoyés
 # par le bouton "Sign in with Google" du frontend.
 GOOGLE_CLIENT_ID = config('IDCLIENT')
+
+# --- PayTech (paiements Wave / Orange Money) ---
+PAYTECH_API_KEY = config('PAYTECH_API_KEY', default='')
+PAYTECH_API_SECRET = config('PAYTECH_API_SECRET', default='')
+PAYTECH_BASE_URL = config('PAYTECH_BASE_URL', default='https://paytech.sn/api')
+
+# --- N8n (envoi des notifications email / WhatsApp) ---
+N8N_WEBHOOK_URL = config('N8N_WEBHOOK_URL', default='')
+
+# --- Service IA (prédictions/recommandations, appelé en HTTP) ---
+IA_SERVICE_URL = config('IA_SERVICE_URL', default='http://127.0.0.1:8001')
+
+# URL du frontend, utilisée pour construire les liens de redirection
+# après paiement (success_url / cancel_url envoyés à PayTech).
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+
+# URL publique de CE backend, utilisée pour construire l'ipn_url envoyée à
+# PayTech (PayTech doit pouvoir nous appeler depuis Internet).
+BACKEND_URL = config('BACKEND_URL', default='http://127.0.0.1:8000')
 
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',

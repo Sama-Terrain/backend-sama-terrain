@@ -1,3 +1,14 @@
 from django.contrib import admin
 
-# Les modèles seront enregistrés ici pour être visibles dans l'admin Django.
+from .models import Abonnement, Paiement
+
+
+@admin.register(Abonnement)
+class AbonnementAdmin(admin.ModelAdmin):
+    list_display = ['gerant', 'statut', 'date_fin_essai', 'date_fin_abonnement']
+
+
+@admin.register(Paiement)
+class PaiementAdmin(admin.ModelAdmin):
+    list_display = ['type', 'montant', 'moyen_paiement', 'cree_le']
+    list_filter = ['type']

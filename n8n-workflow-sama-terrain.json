@@ -1,0 +1,223 @@
+{
+  "name": "Sama-Terrain - Notifications",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sama-terrain",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "1a111111-0000-4000-8000-000000000001",
+      "name": "Webhook Sama-Terrain",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-200, 300],
+      "webhookId": "sama-terrain"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.body.evenement }}",
+                    "rightValue": "reservation_confirmee",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reservation_confirmee"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "c2",
+                    "leftValue": "={{ $json.body.evenement }}",
+                    "rightValue": "abonnement_active",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "abonnement_active"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2b222222-0000-4000-8000-000000000002",
+      "name": "Switch (type d'évènement)",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [40, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.EMAIL_HOST_USER }}",
+        "toEmail": "={{ $json.body.email_amateur }}",
+        "subject": "Réservation confirmée - Sama-Terrain",
+        "emailFormat": "text",
+        "text": "=Bonjour {{ $json.body.nom_amateur }},\n\nVotre réservation au terrain \"{{ $json.body.terrain }}\" est confirmée pour le {{ $json.body.date }} à {{ $json.body.heure }}.\n\nVotre code de ticket (à présenter à l'entrée) : {{ $json.body.code_ticket }}\n\nÀ très vite sur Sama-Terrain !",
+        "options": {}
+      },
+      "id": "3c333333-0000-4000-8000-000000000003",
+      "name": "Email - Réservation confirmée",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [320, 180],
+      "credentials": {
+        "smtp": {
+          "id": "REMPLACE_MOI",
+          "name": "Gmail SMTP Sama-Terrain"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.WHATSAPP_API_URL }}",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"to\": \"{{ $json.body.telephone_amateur }}\",\n  \"message\": \"Réservation confirmée au terrain {{ $json.body.terrain }} le {{ $json.body.date }} à {{ $json.body.heure }}. Code ticket : {{ $json.body.code_ticket }}\"\n}",
+        "options": {}
+      },
+      "id": "4d444444-0000-4000-8000-000000000004",
+      "name": "WhatsApp - Réservation confirmée",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [320, 340],
+      "notes": "Optionnel : à brancher sur ton fournisseur WhatsApp (ex: WhatsApp Business API, Twilio, Ultramsg...). Adapter le corps de la requête selon leur documentation."
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.EMAIL_HOST_USER }}",
+        "toEmail": "={{ $json.body.email_gerant }}",
+        "subject": "Abonnement Sama-Terrain activé",
+        "emailFormat": "text",
+        "text": "=Bonjour,\n\nVotre abonnement Sama-Terrain a bien été activé.\nIl est valable jusqu'au {{ $json.body.date_fin_abonnement }}.\n\nMerci de votre confiance !",
+        "options": {}
+      },
+      "id": "5e555555-0000-4000-8000-000000000005",
+      "name": "Email - Abonnement activé",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [320, 500],
+      "credentials": {
+        "smtp": {
+          "id": "REMPLACE_MOI",
+          "name": "Gmail SMTP Sama-Terrain"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"received\": true\n}",
+        "options": {}
+      },
+      "id": "6f666666-0000-4000-8000-000000000006",
+      "name": "Répondre OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [600, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Sama-Terrain": {
+      "main": [
+        [
+          {
+            "node": "Switch (type d'évènement)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch (type d'évènement)": {
+      "main": [
+        [
+          {
+            "node": "Email - Réservation confirmée",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "WhatsApp - Réservation confirmée",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email - Abonnement activé",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email - Réservation confirmée": {
+      "main": [
+        [
+          {
+            "node": "Répondre OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp - Réservation confirmée": {
+      "main": [
+        [
+          {
+            "node": "Répondre OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email - Abonnement activé": {
+      "main": [
+        [
+          {
+            "node": "Répondre OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

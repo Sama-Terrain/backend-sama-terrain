@@ -35,6 +35,7 @@ urlpatterns = [
     path('api/creneaux/', include('creneaux.urls')),
     path('api/reservations/', include('reservations.urls')),
     path('api/gerant/reservations/', GerantReservationsView.as_view(), name='gerant-reservations'),
+    path('api/paiements/', include('paiements.urls')),
 ]
 
 # En développement, Django sert lui-même les fichiers uploadés (photos...).
