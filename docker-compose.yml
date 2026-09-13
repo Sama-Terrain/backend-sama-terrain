@@ -1,0 +1,49 @@
+services:
+
+  # Base de données PostgreSQL
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sama_terrain
+      POSTGRES_USER: sama_user
+      POSTGRES_PASSWORD: sama_password
+    volumes:
+      # Les données Postgres survivent aux redémarrages/rebuilds du conteneur.
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Pratique pour se connecter à la base depuis un outil externe
+      # (ex: DBeaver, pgAdmin) pendant le développement.
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sama_user -d sama_terrain"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # API Django
+  backend:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Écrase la valeur du .env (vide/sqlite en local) pour pointer vers
+      # le conteneur "db" ci-dessus, joignable par son nom de service.
+      DATABASE_URL: postgres://sama_user:sama_password@db:5432/sama_terrain
+      # Le "db" doit être dans ALLOWED_HOSTS/CSRF si appelé par son nom
+      # de conteneur ; on ajoute aussi le nom du service backend lui-même.
+      ALLOWED_HOSTS: localhost,127.0.0.1,backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Les fichiers uploadés (photos de terrains, documents gérants...)
+      # survivent aux redémarrages du conteneur.
+      - media_data:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  media_data:
