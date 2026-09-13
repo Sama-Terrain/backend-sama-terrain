@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'authentification',
     'terrains',
     'creneaux',
+    'reservations',
 ]
 
 # On utilise notre propre modèle User (email au lieu de username, + rôle)

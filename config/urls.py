@@ -20,6 +20,8 @@ from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
+from reservations.views import GerantReservationsView
+
 urlpatterns = [
     path('admin/', admin.site.urls),
 
@@ -31,6 +33,8 @@ urlpatterns = [
     path('api/auth/', include('authentification.urls')),
     path('api/terrains/', include('terrains.urls')),
     path('api/creneaux/', include('creneaux.urls')),
+    path('api/reservations/', include('reservations.urls')),
+    path('api/gerant/reservations/', GerantReservationsView.as_view(), name='gerant-reservations'),
 ]
 
 # En développement, Django sert lui-même les fichiers uploadés (photos...).

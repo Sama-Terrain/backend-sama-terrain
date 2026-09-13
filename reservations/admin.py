@@ -1,3 +1,9 @@
 from django.contrib import admin
 
-# Les modèles seront enregistrés ici pour être visibles dans l'admin Django.
+from .models import Reservation
+
+
+@admin.register(Reservation)
+class ReservationAdmin(admin.ModelAdmin):
+    list_display = ['id', 'amateur', 'creneau', 'statut', 'montant_total', 'cree_le']
+    list_filter = ['statut']
