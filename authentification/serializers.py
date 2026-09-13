@@ -23,7 +23,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'email', 'prenom', 'nom', 'role']
+        fields = ['id', 'email', 'prenom', 'nom', 'role', 'email_verifie']
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -212,6 +212,12 @@ class GoogleAuthSerializer(serializers.Serializer):
         if cree:
             # Ce compte ne se connectera jamais avec un mot de passe classique.
             user.set_unusable_password()
+            user.save()
+        elif not user.email_verifie:
+            # Compte déjà existant (inscrit classiquement) mais pas encore
+            # vérifié : Google vient de prouver que cet email lui appartient
+            # bel et bien, donc on peut le marquer vérifié directement.
+            user.email_verifie = True
             user.save()
 
         # On génère les mêmes tokens JWT que pour une connexion classique.

@@ -32,8 +32,10 @@ services:
       # le conteneur "db" ci-dessus, joignable par son nom de service.
       DATABASE_URL: postgres://sama_user:sama_password@db:5432/sama_terrain
       # Le "db" doit être dans ALLOWED_HOSTS/CSRF si appelé par son nom
-      # de conteneur ; on ajoute aussi le nom du service backend lui-même.
-      ALLOWED_HOSTS: localhost,127.0.0.1,backend
+      # de conteneur ; on ajoute aussi le nom du service backend lui-même,
+      # ET le domaine ngrok (nécessaire pour que PayTech puisse appeler
+      # notre IPN depuis l'extérieur pendant les tests).
+      ALLOWED_HOSTS: localhost,127.0.0.1,backend,illegibly-superdubious-alayah.ngrok-free.dev
     ports:
       - "8000:8000"
     volumes:

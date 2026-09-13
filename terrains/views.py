@@ -26,25 +26,37 @@ class TerrainListCreateView(APIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def get(self, request):
-        terrains = Terrain.objects.filter(actif=True)
+        # ?mine=true : un gérant connecté demande SES terrains (page "Mes
+        # terrains"), y compris ceux qu'il a désactivés. Sinon, c'est le
+        # catalogue public, qui ne montre que les terrains actifs.
+        mine = request.query_params.get('mine') == 'true'
 
-        # Filtre par ville, ex: /api/terrains/?ville=Dakar
-        ville = request.query_params.get('ville')
-        if ville:
-            terrains = terrains.filter(ville__iexact=ville)
+        if mine:
+            if not request.user.is_authenticated or request.user.role != 'gerant':
+                return Response({'detail': "Réservé aux gérants."}, status=status.HTTP_403_FORBIDDEN)
+            terrains = Terrain.objects.filter(gerant=request.user)
+        else:
+            terrains = Terrain.objects.filter(actif=True)
 
-        # Filtre par date/heure : ne garder que les terrains ayant un
-        # créneau DISPONIBLE à ce moment précis.
-        # Ex: /api/terrains/?date=2026-03-15&heure=18:00
-        date = request.query_params.get('date')
-        heure = request.query_params.get('heure')
-        if date:
-            filtres_creneau = {'creneaux__date': date, 'creneaux__statut': Creneau.Statut.DISPONIBLE}
-            if heure:
-                filtres_creneau['creneaux__heure_debut'] = heure
-            terrains = terrains.filter(**filtres_creneau).distinct()
+            # Filtre par ville, ex: /api/terrains/?ville=Dakar
+            ville = request.query_params.get('ville')
+            if ville:
+                terrains = terrains.filter(ville__iexact=ville)
 
-        serializer = TerrainListSerializer(terrains, many=True, context={'request': request})
+            # Filtre par date/heure : ne garder que les terrains ayant un
+            # créneau DISPONIBLE à ce moment précis.
+            # Ex: /api/terrains/?date=2026-03-15&heure=18:00
+            date = request.query_params.get('date')
+            heure = request.query_params.get('heure')
+            if date:
+                filtres_creneau = {'creneaux__date': date, 'creneaux__statut': Creneau.Statut.DISPONIBLE}
+                if heure:
+                    filtres_creneau['creneaux__heure_debut'] = heure
+                terrains = terrains.filter(**filtres_creneau).distinct()
+
+        serializer = TerrainListSerializer(
+            terrains, many=True, context={'request': request, 'stats_gerant': mine}
+        )
         return Response(serializer.data)
 
     def post(self, request):
@@ -90,7 +102,7 @@ class TerrainDetailView(APIView):
         if terrain is None:
             return Response({'detail': "Terrain introuvable."}, status=status.HTTP_404_NOT_FOUND)
 
-        serializer = TerrainDetailSerializer(terrain, context={'request': request})
+        serializer = TerrainDetailSerializer(terrain, context={'request': request, 'stats_gerant': True})
         return Response(serializer.data)
 
     def patch(self, request, pk):
@@ -104,11 +116,19 @@ class TerrainDetailView(APIView):
 
         terrain = serializer.save()
 
+        # "actif" est géré à la main plutôt que via le serializer : avec des
+        # données multipart/form-data, un BooleanField DRF absent du formulaire
+        # est traité comme False (convention HTML des cases à cocher), ce qui
+        # écraserait le statut actif à chaque modification sans rapport.
+        if 'actif' in request.data:
+            terrain.actif = str(request.data.get('actif')).lower() == 'true'
+            terrain.save()
+
         # Si de nouvelles photos sont envoyées, on les ajoute à celles existantes.
         for photo in request.FILES.getlist('photos'):
             TerrainPhoto.objects.create(terrain=terrain, image=photo)
 
-        return Response(TerrainDetailSerializer(terrain, context={'request': request}).data)
+        return Response(TerrainDetailSerializer(terrain, context={'request': request, 'stats_gerant': True}).data)
 
     def delete(self, request, pk):
         terrain = self.get_object(pk)

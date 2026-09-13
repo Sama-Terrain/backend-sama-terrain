@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from creneaux.models import Creneau
-from paiements.models import Paiement
+from paiements.models import PRIX_ABONNEMENT_MENSUEL, Abonnement, Paiement
 from reservations.models import Reservation
 from reservations.serializers import ReservationSerializer
 from terrains.models import Terrain
@@ -126,6 +126,22 @@ class GerantRevenusView(APIView):
             .order_by('-total')
         )
 
+        # Historique détaillé des paiements (avance + solde), les plus récents
+        # d'abord, pour le tableau "Historique des paiements".
+        historique_paiements = [
+            {
+                'id': p.id,
+                'date': str(p.cree_le.date()),
+                'client': p.reservation.nom_complet,
+                'terrain': p.reservation.creneau.terrain.nom,
+                'moyen_paiement': p.moyen_paiement,
+                'montant': p.montant,
+            }
+            for p in paiements.select_related(
+                'reservation', 'reservation__creneau', 'reservation__creneau__terrain'
+            ).order_by('-cree_le')[:50]
+        ]
+
         return Response({
             'revenus_mois': revenus_mois,
             'revenus_hier': revenus_hier,
@@ -134,6 +150,29 @@ class GerantRevenusView(APIView):
             'evolution_30_jours': evolution_30_jours,
             'reservations_par_jour': reservations_par_jour,
             'modes_paiement_stats': modes_paiement_stats,
+            'historique_paiements': historique_paiements,
+        })
+
+
+class GerantAbonnementView(APIView):
+    """
+    GET /api/gerant/abonnement/
+
+    Renvoie l'état de l'abonnement du gérant connecté (essai, actif, expiré),
+    utilisé pour bloquer l'accès à l'espace gérant si nécessaire et pour
+    afficher la page "Abonnement".
+    """
+
+    permission_classes = [EstGerant]
+
+    def get(self, request):
+        abonnement, _ = Abonnement.objects.get_or_create(gerant=request.user)
+
+        return Response({
+            'statut': abonnement.statut,
+            'date_fin_essai': abonnement.date_fin_essai,
+            'date_fin_abonnement': abonnement.date_fin_abonnement,
+            'prix_mensuel': PRIX_ABONNEMENT_MENSUEL,
         })
 
 

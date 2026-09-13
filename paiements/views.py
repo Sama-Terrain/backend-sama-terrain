@@ -46,8 +46,12 @@ class InitierPaiementView(APIView):
             item_price=reservation.montant_avance,
             ref_command=ref_command,
             ipn_url=f"{settings.BACKEND_URL}/api/paiements/ipn/",
-            success_url=f"{settings.FRONTEND_URL}/paiement/succes",
-            cancel_url=f"{settings.FRONTEND_URL}/paiement/annule",
+            # On transmet l'id de la réservation dans l'URL de retour : une fois
+            # redirigé depuis PayTech, le frontend doit savoir quelle réservation
+            # afficher (il ne peut plus compter sur le state React, perdu lors
+            # de la sortie du site pour aller payer).
+            success_url=f"{settings.FRONTEND_URL}/paiement/succes?reservation={reservation.id}",
+            cancel_url=f"{settings.FRONTEND_URL}/paiement/annule?reservation={reservation.id}",
         )
 
         return Response({'payment_url': resultat['payment_url']}, status=status.HTTP_200_OK)

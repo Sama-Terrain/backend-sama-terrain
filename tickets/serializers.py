@@ -14,6 +14,7 @@ class TicketSerializer(serializers.ModelSerializer):
     ne génère pas d'image, juste la valeur à encoder.
     """
 
+    reservation = serializers.IntegerField(source='reservation.id', read_only=True)
     client = serializers.CharField(source='reservation.nom_complet', read_only=True)
     telephone = serializers.CharField(source='reservation.telephone', read_only=True)
     terrain = serializers.CharField(source='reservation.creneau.terrain.nom', read_only=True)
@@ -25,7 +26,7 @@ class TicketSerializer(serializers.ModelSerializer):
     class Meta:
         model = Ticket
         fields = [
-            'id', 'code', 'utilise', 'utilise_le', 'cree_le',
+            'id', 'code', 'utilise', 'utilise_le', 'cree_le', 'reservation',
             'client', 'telephone', 'terrain', 'date', 'heure_debut', 'heure_fin',
             'montant_restant',
         ]
