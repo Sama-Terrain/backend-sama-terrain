@@ -1,3 +1,9 @@
 from django.contrib import admin
 
-# Les modèles seront enregistrés ici pour être visibles dans l'admin Django.
+from .models import DemandeGerant
+
+
+@admin.register(DemandeGerant)
+class DemandeGerantAdmin(admin.ModelAdmin):
+    list_display = ['user', 'nom_complexe', 'quartier', 'statut', 'cree_le']
+    list_filter = ['statut']

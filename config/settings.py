@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     'paiements',
     'avis',
     'gerant',
+    'admin_panel',
 ]
 
 # On utilise notre propre modèle User (email au lieu de username, + rôle)

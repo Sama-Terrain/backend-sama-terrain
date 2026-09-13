@@ -9,6 +9,9 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from gerant.models import DemandeGerant
+from paiements.models import Abonnement
+
 from .models import User
 
 
@@ -219,3 +222,69 @@ class GoogleAuthSerializer(serializers.Serializer):
             'role': user.role,
             'user': UserSerializer(user).data,
         }
+
+
+class DevenirGerantSerializer(serializers.ModelSerializer):
+    """
+    POST /api/auth/devenir-gerant
+
+    Crée un compte gérant + sa demande de validation. Le compte reste
+    inactif (is_active=False) tant qu'un admin n'a pas validé la demande
+    (voir app admin_panel). Reprend le même formulaire que le frontend
+    "Devenir gérant" (DevenirGerant.jsx) : infos personnelles + business.
+    """
+
+    confirmPassword = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True, validators=[validate_password])
+
+    # Champs du modèle DemandeGerant, saisis en même temps que le compte.
+    nom_complexe = serializers.CharField(max_length=150)
+    quartier = serializers.CharField(max_length=100)
+    adresse = serializers.CharField(max_length=255)
+    whatsapp = serializers.CharField(max_length=20)
+    document = serializers.FileField()
+
+    class Meta:
+        model = User
+        fields = [
+            'prenom', 'nom', 'email', 'password', 'confirmPassword',
+            'nom_complexe', 'quartier', 'adresse', 'whatsapp', 'document',
+        ]
+
+    def validate_email(self, value):
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("Un compte existe déjà avec cet email.")
+        return value
+
+    def validate(self, data):
+        if data['password'] != data['confirmPassword']:
+            raise serializers.ValidationError({
+                'confirmPassword': "Les mots de passe ne correspondent pas."
+            })
+        return data
+
+    def create(self, validated_data):
+        # On sépare les champs du User de ceux de la DemandeGerant.
+        champs_demande = {
+            'nom_complexe': validated_data.pop('nom_complexe'),
+            'quartier': validated_data.pop('quartier'),
+            'adresse': validated_data.pop('adresse'),
+            'whatsapp': validated_data.pop('whatsapp'),
+            'document': validated_data.pop('document'),
+        }
+        validated_data.pop('confirmPassword')
+        mot_de_passe = validated_data.pop('password')
+
+        user = User(
+            username=validated_data['email'],
+            role=User.Role.GERANT,
+            is_active=False,  # inactif tant que l'admin n'a pas validé
+            **validated_data,
+        )
+        user.set_password(mot_de_passe)
+        user.save()
+
+        DemandeGerant.objects.create(user=user, **champs_demande)
+        Abonnement.objects.create(gerant=user)  # statut par défaut : en_attente_validation
+
+        return user

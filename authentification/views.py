@@ -4,7 +4,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from rest_framework.parsers import FormParser, MultiPartParser
+
 from .serializers import (
+    DevenirGerantSerializer,
     GoogleAuthSerializer,
     LoginSerializer,
     LogoutSerializer,
@@ -179,3 +182,36 @@ class MeView(APIView):
 
     def get(self, request):
         return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
+
+
+class DevenirGerantView(APIView):
+    """
+    POST /api/auth/devenir-gerant
+
+    Crée un compte gérant en attente de validation admin (voir la page
+    "Devenir gérant" du frontend). Le compte est inactif jusqu'à
+    validation (voir app admin_panel).
+    """
+
+    permission_classes = [AllowAny]
+    parser_classes = [MultiPartParser, FormParser]  # un fichier (document) est envoyé
+
+    def post(self, request):
+        serializer = DevenirGerantSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        user = serializer.save()
+        generer_et_envoyer_code(user)
+
+        return Response(
+            {
+                'message': (
+                    "Votre demande a été envoyée. Vérifiez votre email, puis "
+                    "attendez la validation de votre compte par un administrateur."
+                ),
+                'email': user.email,
+            },
+            status=status.HTTP_201_CREATED,
+        )

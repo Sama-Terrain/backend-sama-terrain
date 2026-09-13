@@ -40,6 +40,7 @@ urlpatterns = [
     path('api/avis/', include('avis.urls')),
     path('api/gerant/', include('gerant.urls')),
     path('api/ia/', include('gerant.ia_urls')),
+    path('api/admin/', include('admin_panel.urls')),
 ]
 
 # En développement, Django sert lui-même les fichiers uploadés (photos...).
