@@ -1,5 +1,8 @@
 from django.urls import path
 
+from .views import TicketDetailView, ValiderTicketView
+
 urlpatterns = [
-    # Les routes seront ajoutées en priorité 6.
+    path('valider/', ValiderTicketView.as_view(), name='ticket-valider'),
+    path('<int:pk>/', TicketDetailView.as_view(), name='ticket-detail'),
 ]

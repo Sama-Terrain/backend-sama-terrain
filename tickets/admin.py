@@ -1,3 +1,9 @@
 from django.contrib import admin
 
-# Les modèles seront enregistrés ici pour être visibles dans l'admin Django.
+from .models import Ticket
+
+
+@admin.register(Ticket)
+class TicketAdmin(admin.ModelAdmin):
+    list_display = ['code', 'reservation', 'utilise', 'utilise_le']
+    list_filter = ['utilise']
