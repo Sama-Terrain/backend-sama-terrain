@@ -36,6 +36,9 @@ services:
       # ET le domaine ngrok (nécessaire pour que PayTech puisse appeler
       # notre IPN depuis l'extérieur pendant les tests).
       ALLOWED_HOSTS: localhost,127.0.0.1,backend,illegibly-superdubious-alayah.ngrok-free.dev
+      # Le service IA tourne dans son propre conteneur, joignable par son
+      # nom de service sur le réseau Docker interne.
+      IA_SERVICE_URL: http://ia:8001
     ports:
       - "8000:8000"
     volumes:
@@ -50,6 +53,32 @@ services:
       db:
         condition: service_healthy
 
+  # Micro-service IA (FastAPI), séparé de Django (voir dossier IA/) :
+  # analyse de la demande / prix recommandés, et chatbot d'assistance.
+  ia:
+    build: ../IA
+    restart: unless-stopped
+    env_file:
+      - ../IA/.env
+    environment:
+      DATABASE_URL: postgresql://sama_user:sama_password@db:5432/sama_terrain
+      # Le téléchargement "xet" (rapide) de HuggingFace échoue parfois selon
+      # le réseau : on force le téléchargement HTTP classique, plus lent
+      # mais plus fiable.
+      HF_HUB_DISABLE_XET: "1"
+    ports:
+      - "8001:8001"
+    volumes:
+      - ../IA:/app
+      # Cache du modèle d'embeddings HuggingFace : évite de le retélécharger
+      # à chaque redémarrage du conteneur (le réseau vers HF peut être
+      # instable, autant ne payer ce coût qu'une seule fois).
+      - ia_hf_cache:/root/.cache/huggingface
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   media_data:
+  ia_hf_cache:

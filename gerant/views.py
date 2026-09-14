@@ -5,7 +5,7 @@ from django.conf import settings
 from django.db.models import Avg, Sum
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -207,3 +207,34 @@ class IAPredictionsView(APIView):
                 {'disponible': False, 'message': "Service de prédictions IA indisponible pour le moment."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
+
+
+class ChatbotView(APIView):
+    """
+    POST /api/ia/chatbot/
+
+    Fait suivre le message au micro-service IA (FastAPI), qui répond en
+    s'appuyant sur les vrais terrains de la base. Accessible sans connexion
+    (le chatbot est sur la page d'accueil publique).
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        message = request.data.get('message', '').strip()
+        if not message:
+            return Response({'detail': "Message vide."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            reponse = requests.post(
+                f"{settings.IA_SERVICE_URL}/chatbot",
+                json={'message': message},
+                timeout=15,
+            )
+            reponse.raise_for_status()
+            return Response(reponse.json())
+        except requests.RequestException:
+            return Response({
+                'texte': "Je recherche les meilleurs terrains disponibles pour vous. "
+                         "Pouvez-vous préciser un quartier de Dakar ou une date ?",
+            })

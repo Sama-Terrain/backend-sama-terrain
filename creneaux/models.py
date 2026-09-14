@@ -27,10 +27,19 @@ class Creneau(models.Model):
     # les tarifs selon l'heure : prix week-end, heures de pointe, etc.)
     prix = models.PositiveIntegerField(help_text="Prix en FCFA")
 
-    # Rempli par le service IA quand il recommande un prix différent pour
-    # ce créneau (voir /api/ia/predictions/). Vide tant qu'aucune
-    # recommandation n'a été demandée ou appliquée.
+    # Champs remplis par le service IA (FastAPI, voir /api/ia/predictions/)
+    # à partir des vraies statistiques de réservation. Vides tant qu'aucune
+    # analyse n'a encore été demandée pour ce terrain.
+    class NiveauDemande(models.TextChoices):
+        FAIBLE = 'faible', 'Faible'
+        MOYEN = 'moyen', 'Moyen'
+        ELEVE = 'eleve', 'Élevé'
+
+    niveau_demande = models.CharField(
+        max_length=10, choices=NiveauDemande.choices, null=True, blank=True,
+    )
     prix_recommande_ia = models.PositiveIntegerField(null=True, blank=True)
+    derniere_maj_ia = models.DateTimeField(null=True, blank=True)
 
     statut = models.CharField(max_length=15, choices=Statut.choices, default=Statut.DISPONIBLE)
 
