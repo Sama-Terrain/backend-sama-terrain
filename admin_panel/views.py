@@ -12,6 +12,7 @@ from avis.utils import recalculer_note_terrain
 from creneaux.models import Creneau
 from gerant.models import DemandeGerant
 from paiements.models import Abonnement, Paiement
+from paiements.n8n import notifier_n8n
 from reservations.models import Reservation
 from terrains.models import Terrain
 
@@ -396,7 +397,9 @@ class RejeterGerantView(APIView):
     """
     PATCH /api/admin/gerants/:id/rejeter/
 
-    Rejette la demande : le compte reste inactif.
+    Rejette la demande : un motif est obligatoire (envoyé par email à la
+    personne), puis le compte (jamais activé) est supprimé pour libérer
+    l'email et lui permettre de soumettre une nouvelle demande.
     """
 
     permission_classes = [EstAdmin]
@@ -406,11 +409,26 @@ class RejeterGerantView(APIView):
         if demande is None:
             return Response({'detail': "Demande introuvable."}, status=status.HTTP_404_NOT_FOUND)
 
-        demande.statut = DemandeGerant.Statut.REJETEE
-        demande.traitee_le = timezone.now()
-        demande.save()
+        motif = request.data.get('motif', '').strip()
+        if not motif:
+            return Response(
+                {'motif': ["Le motif du rejet est obligatoire."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        return Response({'message': "Demande rejetée."})
+        user = demande.user
+        notifier_n8n('demande_gerant_rejetee', {
+            'email_gerant': user.email,
+            'nom_gerant': user.prenom,
+            'motif': motif,
+        })
+
+        # Le compte n'a jamais été activé : on le supprime entièrement (la
+        # demande est supprimée avec, via CASCADE) pour que la personne
+        # puisse resoumettre une demande avec le même email.
+        user.delete()
+
+        return Response({'message': "Demande rejetée. La personne a été notifiée par email."})
 
 
 class AdminAvisListView(APIView):

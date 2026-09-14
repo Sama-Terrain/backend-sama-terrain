@@ -91,6 +91,7 @@ CORS_ALLOWED_ORIGINS = [
     FRONTEND_URL,
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    'https://sama-terrain.netlify.app',
 ]
 
 # URL publique de CE backend, utilisée pour construire l'ipn_url envoyée à

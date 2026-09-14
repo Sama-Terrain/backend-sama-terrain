@@ -38,6 +38,10 @@ class Abonnement(models.Model):
 
     cree_le = models.DateTimeField(auto_now_add=True)
 
+    # Passe à True dès qu'une alerte d'expiration proche a été envoyée via
+    # N8n, pour ne jamais l'envoyer deux fois pour la même échéance.
+    alerte_expiration_envoyee = models.BooleanField(default=False)
+
     def __str__(self):
         return f"Abonnement de {self.gerant.email} ({self.statut})"
 

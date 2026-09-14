@@ -6,6 +6,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 from rest_framework.parsers import FormParser, MultiPartParser
 
+from .models import User
 from .serializers import (
     DevenirGerantSerializer,
     GoogleAuthSerializer,
@@ -17,6 +18,7 @@ from .serializers import (
     VerifyEmailSerializer,
 )
 from .utils import generer_et_envoyer_code
+from paiements.n8n import notifier_n8n
 
 
 class RegisterView(APIView):
@@ -204,6 +206,18 @@ class DevenirGerantView(APIView):
 
         user = serializer.save()
         generer_et_envoyer_code(user)
+
+        emails_admin = list(
+            User.objects.filter(role=User.Role.ADMIN).values_list('email', flat=True)
+        )
+        demande = user.demande_gerant
+        notifier_n8n('nouvelle_demande_gerant', {
+            'emails_admin': emails_admin,
+            'nom_gerant': f"{user.prenom} {user.nom}",
+            'email_gerant': user.email,
+            'nom_complexe': demande.nom_complexe,
+            'quartier': demande.quartier,
+        })
 
         return Response(
             {

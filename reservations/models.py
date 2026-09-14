@@ -55,6 +55,10 @@ class Reservation(models.Model):
     # statut est toujours EN_ATTENTE, la réservation est considérée expirée.
     expire_le = models.DateTimeField()
 
+    # Passe à True dès qu'un rappel N8n a été envoyé pour cette réservation,
+    # pour ne jamais envoyer le même rappel deux fois.
+    rappel_envoye = models.BooleanField(default=False)
+
     def save(self, *args, **kwargs):
         if self._state.adding and not self.expire_le:
             self.expire_le = timezone.now() + timedelta(minutes=DELAI_EXPIRATION_MINUTES)

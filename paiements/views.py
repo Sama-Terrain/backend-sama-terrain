@@ -204,6 +204,96 @@ class AbonnementIPNView(APIView):
         return Response({'message': "Abonnement activé."}, status=status.HTTP_200_OK)
 
 
+class RappelsReservationsView(APIView):
+    """
+    GET /api/paiements/n8n/rappels-reservations/
+
+    Appelée périodiquement par N8n (nœud "Schedule Trigger", ex: toutes les
+    30 minutes). Cherche les réservations confirmées dont le match a lieu
+    dans moins de 3h et pour lesquelles aucun rappel n'a encore été envoyé,
+    envoie l'évènement à N8n pour chacune, puis les marque comme "rappel envoyé"
+    pour ne jamais les renvoyer deux fois.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        maintenant = timezone.now()
+        dans_3h = maintenant + timedelta(hours=3)
+
+        reservations = Reservation.objects.filter(
+            statut=Reservation.Statut.CONFIRMEE,
+            rappel_envoye=False,
+        ).select_related('creneau', 'creneau__terrain', 'amateur')
+
+        nb_envoyes = 0
+        for reservation in reservations:
+            creneau = reservation.creneau
+            debut = timezone.make_aware(
+                timezone.datetime.combine(creneau.date, creneau.heure_debut)
+            )
+
+            if not (maintenant <= debut <= dans_3h):
+                continue
+
+            notifier_n8n('rappel_reservation', {
+                'email_amateur': reservation.amateur.email,
+                'nom_amateur': reservation.amateur.prenom,
+                'terrain': creneau.terrain.nom,
+                'date': str(creneau.date),
+                'heure': str(creneau.heure_debut),
+            })
+            reservation.rappel_envoye = True
+            reservation.save(update_fields=['rappel_envoye'])
+            nb_envoyes += 1
+
+        return Response({'rappels_envoyes': nb_envoyes}, status=status.HTTP_200_OK)
+
+
+class AlertesExpirationAbonnementView(APIView):
+    """
+    GET /api/paiements/n8n/alertes-expiration-abonnement/
+
+    Appelée périodiquement par N8n (une fois par jour). Cherche les
+    abonnements (essai ou payé) qui expirent dans moins de 3 jours et pour
+    lesquels aucune alerte n'a encore été envoyée, notifie N8n pour chacun,
+    puis les marque comme "alerte envoyée".
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        maintenant = timezone.now()
+        dans_3_jours = maintenant + timedelta(days=3)
+
+        abonnements = Abonnement.objects.filter(
+            statut__in=[Abonnement.Statut.ESSAI, Abonnement.Statut.ACTIF],
+            alerte_expiration_envoyee=False,
+        ).select_related('gerant')
+
+        nb_envoyes = 0
+        for abonnement in abonnements:
+            date_fin = (
+                abonnement.date_fin_essai
+                if abonnement.statut == Abonnement.Statut.ESSAI
+                else abonnement.date_fin_abonnement
+            )
+
+            if not date_fin or not (maintenant <= date_fin <= dans_3_jours):
+                continue
+
+            notifier_n8n('abonnement_expire_bientot', {
+                'email_gerant': abonnement.gerant.email,
+                'nom_gerant': abonnement.gerant.prenom,
+                'date_fin': str(date_fin),
+            })
+            abonnement.alerte_expiration_envoyee = True
+            abonnement.save(update_fields=['alerte_expiration_envoyee'])
+            nb_envoyes += 1
+
+        return Response({'alertes_envoyees': nb_envoyes}, status=status.HTTP_200_OK)
+
+
 class SoldeView(APIView):
     """
     POST /api/paiements/solde/
