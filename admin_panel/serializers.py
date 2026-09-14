@@ -22,7 +22,7 @@ class DemandeGerantSerializer(serializers.ModelSerializer):
 class AdminAvisSerializer(serializers.ModelSerializer):
     """Un avis, vu depuis l'espace admin (modération)."""
 
-    amateur_nom = serializers.CharField(source='amateur.prenom', read_only=True)
+    amateur_nom = serializers.SerializerMethodField()
     terrain_nom = serializers.CharField(source='terrain.nom', read_only=True)
 
     class Meta:
@@ -31,3 +31,6 @@ class AdminAvisSerializer(serializers.ModelSerializer):
             'id', 'amateur_nom', 'terrain_nom', 'note', 'commentaire',
             'signale', 'visible', 'cree_le',
         ]
+
+    def get_amateur_nom(self, avis):
+        return f"{avis.amateur.prenom} {avis.amateur.nom}"
