@@ -5,22 +5,16 @@ from django.conf import settings
 from django.db.models import Avg, Sum
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from creneaux.models import Creneau
+from gerant.permissions import EstGerant, EstGerantAbonnementActif
 from paiements.models import PRIX_ABONNEMENT_MENSUEL, Abonnement, Paiement
 from reservations.models import Reservation
 from reservations.serializers import ReservationSerializer
 from terrains.models import Terrain
-
-
-class EstGerant(IsAuthenticated):
-    """Autorise uniquement les utilisateurs connectés avec le rôle 'gerant'."""
-
-    def has_permission(self, request, view):
-        return super().has_permission(request, view) and request.user.role == 'gerant'
 
 
 class GerantDashboardView(APIView):
@@ -31,7 +25,7 @@ class GerantDashboardView(APIView):
     gérant connecté.
     """
 
-    permission_classes = [EstGerant]
+    permission_classes = [EstGerantAbonnementActif]
 
     def get(self, request):
         terrains = Terrain.objects.filter(gerant=request.user)
@@ -77,7 +71,7 @@ class GerantRevenusView(APIView):
     gérant connecté.
     """
 
-    permission_classes = [EstGerant]
+    permission_classes = [EstGerantAbonnementActif]
 
     def get(self, request):
         terrains = Terrain.objects.filter(gerant=request.user)
@@ -186,7 +180,7 @@ class IAPredictionsView(APIView):
     ne tourne pas à l'adresse IA_SERVICE_URL.
     """
 
-    permission_classes = [EstGerant]
+    permission_classes = [EstGerantAbonnementActif]
 
     def get(self, request, terrain_id):
         terrain = Terrain.objects.filter(pk=terrain_id, gerant=request.user).first()

@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from reservations.models import Reservation
 
@@ -44,6 +45,22 @@ class Abonnement(models.Model):
 
     def __str__(self):
         return f"Abonnement de {self.gerant.email} ({self.statut})"
+
+    @property
+    def est_actif(self):
+        """
+        True si le gérant a encore accès à son espace : en essai avec une
+        date de fin d'essai non dépassée, ou abonnement payé avec une date
+        de fin d'abonnement non dépassée. Le statut en base n'est pas mis
+        à jour par une tâche planifiée, donc l'expiration se calcule ici
+        à la volée à partir des dates.
+        """
+        maintenant = timezone.now()
+        if self.statut == self.Statut.ESSAI:
+            return bool(self.date_fin_essai and self.date_fin_essai > maintenant)
+        if self.statut == self.Statut.ACTIF:
+            return bool(self.date_fin_abonnement and self.date_fin_abonnement > maintenant)
+        return False
 
 
 class Paiement(models.Model):

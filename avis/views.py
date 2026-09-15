@@ -7,8 +7,28 @@ from reservations.models import Reservation
 from terrains.models import Terrain
 
 from .models import Avis
-from .serializers import AvisCreateSerializer, AvisSerializer, match_deja_joue
+from .serializers import AvisCreateSerializer, AvisSerializer, MeilleurAvisSerializer, match_deja_joue
 from .utils import recalculer_note_terrain
+
+
+class MeilleursAvisView(APIView):
+    """
+    GET /api/avis/meilleurs/
+
+    Témoignages mis en avant sur la page d'accueil (tous terrains
+    confondus) : les avis visibles les mieux notés et commentés.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        avis = (
+            Avis.objects.filter(visible=True, note__gte=4)
+            .exclude(commentaire='')
+            .select_related('terrain', 'amateur')
+            .order_by('-note', '-cree_le')[:6]
+        )
+        return Response(MeilleurAvisSerializer(avis, many=True).data)
 
 
 class TerrainAvisListView(APIView):

@@ -28,6 +28,19 @@ class AvisSerializer(serializers.ModelSerializer):
         return f"{avis.amateur.prenom[:1]}{avis.amateur.nom[:1]}".upper()
 
 
+class MeilleurAvisSerializer(AvisSerializer):
+    """
+    Représentation d'un avis pour la section témoignages de la page
+    d'accueil (tous terrains confondus) : ajoute le nom du terrain, faute
+    de rôle/fonction déclaré par l'amateur.
+    """
+
+    terrain = serializers.CharField(source='terrain.nom', read_only=True)
+
+    class Meta(AvisSerializer.Meta):
+        fields = AvisSerializer.Meta.fields + ['terrain']
+
+
 class AvisCreateSerializer(serializers.ModelSerializer):
     """
     Utilisé pour POST /api/avis/.
