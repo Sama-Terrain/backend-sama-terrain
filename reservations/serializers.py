@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import serializers
 
 from creneaux.models import Creneau
@@ -58,6 +59,13 @@ class ReservationCreateSerializer(serializers.ModelSerializer):
     def validate_creneau(self, creneau):
         if creneau.statut != Creneau.Statut.DISPONIBLE:
             raise serializers.ValidationError("Ce créneau n'est plus disponible.")
+
+        debut_creneau = timezone.make_aware(
+            timezone.datetime.combine(creneau.date, creneau.heure_debut)
+        )
+        if debut_creneau <= timezone.now():
+            raise serializers.ValidationError("Ce créneau est déjà passé.")
+
         return creneau
 
     def validate_montant_avance(self, montant):

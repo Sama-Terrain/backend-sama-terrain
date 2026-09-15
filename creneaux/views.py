@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -31,6 +32,11 @@ class TerrainCreneauxListView(APIView):
         date = request.query_params.get('date')
         if date:
             creneaux = creneaux.filter(date=date)
+
+        # Un créneau du jour dont l'heure de début est déjà passée ne peut
+        # plus être réservé : inutile de le montrer comme "disponible".
+        maintenant = timezone.localtime()
+        creneaux = creneaux.exclude(date=maintenant.date(), heure_debut__lt=maintenant.time())
 
         return Response(CreneauSerializer(creneaux, many=True).data)
 
