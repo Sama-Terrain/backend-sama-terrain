@@ -2,7 +2,7 @@ from datetime import timedelta
 
 import requests
 from django.conf import settings
-from django.db.models import Avg, Sum
+from django.db.models import Avg, Count, F, Max, Sum
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny
@@ -15,6 +15,9 @@ from paiements.models import PRIX_ABONNEMENT_MENSUEL, Abonnement, Paiement
 from reservations.models import Reservation
 from reservations.serializers import ReservationSerializer
 from terrains.models import Terrain
+
+JOURS_FR = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
+JOURS_FR_COURT = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 
 
 class GerantDashboardView(APIView):
@@ -167,6 +170,131 @@ class GerantAbonnementView(APIView):
             'date_fin_essai': abonnement.date_fin_essai,
             'date_fin_abonnement': abonnement.date_fin_abonnement,
             'prix_mensuel': PRIX_ABONNEMENT_MENSUEL,
+        })
+
+
+class GerantInsightsIAView(APIView):
+    """
+    GET /api/gerant/insights-ia/
+
+    Vue d'ensemble IA pour tous les terrains du gérant connecté : rafraîchit
+    les prédictions de demande (service IA) pour chaque terrain, puis
+    agrège l'occupation réelle des 7 prochains jours, les créneaux dont le
+    prix recommandé par l'IA diffère du prix actuel, et des alertes
+    dérivées des vraies données (créneaux sous-tarifés, clients fidèles
+    inactifs). Comme pour IAPredictionsView, rien n'est inventé : tout part
+    de statistiques réelles, éventuellement mises en phrases par le LLM.
+    """
+
+    permission_classes = [EstGerantAbonnementActif]
+
+    def get(self, request):
+        terrains = Terrain.objects.filter(gerant=request.user)
+
+        recommandations_ia = []
+        for terrain in terrains:
+            try:
+                reponse = requests.get(
+                    f"{settings.IA_SERVICE_URL}/predictions/{terrain.id}", timeout=5
+                )
+                reponse.raise_for_status()
+                recommandations_ia.extend(reponse.json().get('recommandations', []))
+            except requests.RequestException:
+                continue
+
+        aujourdhui = timezone.localdate()
+        occupation_7_jours = []
+        for i in range(7):
+            jour = aujourdhui + timedelta(days=i)
+            creneaux_jour = Creneau.objects.filter(terrain__in=terrains, date=jour)
+            total = creneaux_jour.count()
+            confirmes = creneaux_jour.filter(statut=Creneau.Statut.CONFIRME).count()
+            occupation_7_jours.append({
+                'date': str(jour),
+                'label': f"{JOURS_FR_COURT[jour.weekday()]} {jour.strftime('%d')}",
+                'taux': round(confirmes / total * 100) if total else 0,
+            })
+
+        creneaux_repricing = (
+            Creneau.objects.filter(
+                terrain__in=terrains,
+                statut=Creneau.Statut.DISPONIBLE,
+                date__gte=aujourdhui,
+                prix_recommande_ia__isnull=False,
+            )
+            .exclude(prix_recommande_ia=F('prix'))
+            .select_related('terrain')
+            .order_by('date', 'heure_debut')[:3]
+        )
+        recommandations_tarifaires = [
+            {
+                'id': c.id,
+                'terrain': c.terrain.nom,
+                'jour': f"{JOURS_FR[c.date.weekday()]} {c.date.strftime('%d/%m')}",
+                'creneau': f"{c.heure_debut.strftime('%H:%M')} - {c.heure_fin.strftime('%H:%M')}",
+                'prix_actuel': c.prix,
+                'prix_recommande': c.prix_recommande_ia,
+                'impact_pct': round((c.prix_recommande_ia - c.prix) / c.prix * 100),
+            }
+            for c in creneaux_repricing
+        ]
+
+        alertes = []
+
+        creneau_sous_tarife = (
+            Creneau.objects.filter(
+                terrain__in=terrains,
+                statut=Creneau.Statut.DISPONIBLE,
+                date__gte=aujourdhui,
+                niveau_demande=Creneau.NiveauDemande.ELEVE,
+                prix_recommande_ia__isnull=False,
+            )
+            .exclude(prix_recommande_ia=F('prix'))
+            .select_related('terrain')
+            .order_by('date', 'heure_debut')
+            .first()
+        )
+        if creneau_sous_tarife:
+            hausse_pct = round(
+                (creneau_sous_tarife.prix_recommande_ia - creneau_sous_tarife.prix)
+                / creneau_sous_tarife.prix * 100
+            )
+            alertes.append({
+                'type': 'opportunite',
+                'titre': f"Créneau {creneau_sous_tarife.heure_debut.strftime('%H:%M')} sous-tarifé",
+                'message': (
+                    f"La demande pour ce créneau du {creneau_sous_tarife.date.strftime('%d/%m')} "
+                    f"est élevée. Augmentation tarifaire suggérée de +{hausse_pct}%."
+                ),
+                'creneau_id': creneau_sous_tarife.id,
+            })
+
+        il_y_a_30_jours = aujourdhui - timedelta(days=30)
+        clients_fideles_inactifs = (
+            Reservation.objects.filter(
+                creneau__terrain__in=terrains, statut=Reservation.Statut.CONFIRMEE
+            )
+            .values('amateur')
+            .annotate(nb_reservations=Count('id'), derniere=Max('creneau__date'))
+            .filter(nb_reservations__gte=2, derniere__lt=il_y_a_30_jours)
+            .count()
+        )
+        if clients_fideles_inactifs:
+            alertes.append({
+                'type': 'fidelisation',
+                'titre': 'Fidélisation client',
+                'message': (
+                    f"{clients_fideles_inactifs} client(s) régulier(s) n'ont pas réservé "
+                    "depuis plus de 30 jours. Envisagez une offre de relance."
+                ),
+                'creneau_id': None,
+            })
+
+        return Response({
+            'recommandations_ia': recommandations_ia[:4],
+            'occupation_7_jours': occupation_7_jours,
+            'recommandations_tarifaires': recommandations_tarifaires,
+            'alertes': alertes,
         })
 
 
