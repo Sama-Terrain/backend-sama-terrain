@@ -10,7 +10,10 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
+
+import dj_database_url
 from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -41,15 +44,74 @@ INSTALLED_APPS = [
 
     #api
     'rest_framework',
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
+    'corsheaders',
 
     #documentation
     'drf_spectacular',
 
     #apps
+    'authentification',
+    'terrains',
+    'creneaux',
+    'reservations',
+    'tickets',
+    'paiements',
+    'avis',
+    'gerant',
+    'admin_panel',
 ]
+
+# On utilise notre propre modèle User (email au lieu de username, + rôle)
+AUTH_USER_MODEL = 'authentification.User'
+
+# Identifiant client Google, utilisé pour vérifier les jetons envoyés
+# par le bouton "Sign in with Google" du frontend.
+GOOGLE_CLIENT_ID = config('IDCLIENT')
+
+# --- PayTech (paiements Wave / Orange Money) ---
+PAYTECH_API_KEY = config('PAYTECH_API_KEY', default='')
+PAYTECH_API_SECRET = config('PAYTECH_API_SECRET', default='')
+PAYTECH_BASE_URL = config('PAYTECH_BASE_URL', default='https://paytech.sn/api')
+
+# --- N8n (envoi des notifications email / WhatsApp) ---
+N8N_WEBHOOK_URL = config('N8N_WEBHOOK_URL', default='')
+
+# --- Service IA (prédictions/recommandations, appelé en HTTP) ---
+IA_SERVICE_URL = config('IA_SERVICE_URL', default='http://127.0.0.1:8001')
+
+# URL du frontend, utilisée pour construire les liens de redirection
+# après paiement (success_url / cancel_url envoyés à PayTech).
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+
+# Autorise le frontend (autre origine : port différent) à appeler cette API
+# depuis le navigateur. Sans ça, le navigateur bloque les requêtes (erreur CORS).
+CORS_ALLOWED_ORIGINS = [
+    FRONTEND_URL,
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://sama-terrain.netlify.app',
+]
+
+# URL publique de CE backend, utilisée pour construire l'ipn_url envoyée à
+# PayTech (PayTech doit pouvoir nous appeler depuis Internet).
+BACKEND_URL = config('BACKEND_URL', default='http://127.0.0.1:8000')
 
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    # Toutes les vues protégées attendent un token JWT dans le header :
+    # Authorization: Bearer <access_token>
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+}
+
+SIMPLE_JWT = {
+    # Durée de vie du token d'accès (utilisé à chaque requête)
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
+    # Durée de vie du token de rafraîchissement (pour obtenir un nouvel access token)
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
 }
 
 SPECTACULAR_SETTINGS = {
@@ -60,6 +122,8 @@ SPECTACULAR_SETTINGS = {
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # Doit être placé le plus haut possible, avant CommonMiddleware.
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -91,8 +155,13 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
+# Si DATABASE_URL est défini (ex: dans Docker, vers Postgres), on l'utilise.
+# Sinon (dev local sans Docker), on retombe sur un simple fichier SQLite.
+DATABASE_URL = config('DATABASE_URL', default='')
 DATABASES = {
-    'default': {
+    'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600)
+    if DATABASE_URL
+    else {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     }
@@ -134,13 +203,24 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Fichiers uploadés par les utilisateurs (photos de terrains, etc.)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
+#
+# On envoie les vrais emails (code de vérification) via un compte Gmail.
+# EMAIL_BACKEND = 'smtp' veut dire : Django envoie réellement l'email
+# (au lieu de juste l'afficher dans la console).
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER

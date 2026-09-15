@@ -1,0 +1,84 @@
+services:
+
+  # Base de données PostgreSQL
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sama_terrain
+      POSTGRES_USER: sama_user
+      POSTGRES_PASSWORD: sama_password
+    volumes:
+      # Les données Postgres survivent aux redémarrages/rebuilds du conteneur.
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Pratique pour se connecter à la base depuis un outil externe
+      # (ex: DBeaver, pgAdmin) pendant le développement.
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sama_user -d sama_terrain"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # API Django
+  backend:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Écrase la valeur du .env (vide/sqlite en local) pour pointer vers
+      # le conteneur "db" ci-dessus, joignable par son nom de service.
+      DATABASE_URL: postgres://sama_user:sama_password@db:5432/sama_terrain
+      # Le "db" doit être dans ALLOWED_HOSTS/CSRF si appelé par son nom
+      # de conteneur ; on ajoute aussi le nom du service backend lui-même,
+      # ET le domaine ngrok (nécessaire pour que PayTech puisse appeler
+      # notre IPN depuis l'extérieur pendant les tests).
+      ALLOWED_HOSTS: localhost,127.0.0.1,backend,illegibly-superdubious-alayah.ngrok-free.dev
+      # Le service IA tourne dans son propre conteneur, joignable par son
+      # nom de service sur le réseau Docker interne.
+      IA_SERVICE_URL: http://ia:8001
+    ports:
+      - "8000:8000"
+    volumes:
+      # Monte le code depuis l'hôte : modifier un fichier Python ici prend
+      # effet dans le conteneur sans avoir à reconstruire l'image (pratique
+      # en dev). En production, on retirerait cette ligne (code figé au build).
+      - .:/app
+      # Les fichiers uploadés (photos de terrains, documents gérants...)
+      # survivent aux redémarrages du conteneur.
+      - media_data:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Micro-service IA (FastAPI), séparé de Django (voir dossier IA/) :
+  # analyse de la demande / prix recommandés, et chatbot d'assistance.
+  ia:
+    build: ../IA
+    restart: unless-stopped
+    env_file:
+      - ../IA/.env
+    environment:
+      DATABASE_URL: postgresql://sama_user:sama_password@db:5432/sama_terrain
+      # Le téléchargement "xet" (rapide) de HuggingFace échoue parfois selon
+      # le réseau : on force le téléchargement HTTP classique, plus lent
+      # mais plus fiable.
+      HF_HUB_DISABLE_XET: "1"
+    ports:
+      - "8001:8001"
+    volumes:
+      - ../IA:/app
+      # Cache du modèle d'embeddings HuggingFace : évite de le retélécharger
+      # à chaque redémarrage du conteneur (le réseau vers HF peut être
+      # instable, autant ne payer ce coût qu'une seule fois).
+      - ia_hf_cache:/root/.cache/huggingface
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  media_data:
+  ia_hf_cache:

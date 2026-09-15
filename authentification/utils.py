@@ -1,0 +1,32 @@
+import random
+
+from django.core.mail import send_mail
+from django.utils import timezone
+
+
+def generer_et_envoyer_code(user):
+    """
+    Génère un code à 6 chiffres pour `user`, le sauvegarde sur son compte,
+    et l'envoie par email via Gmail (configuré dans settings.py).
+
+    Utilisée après l'inscription, et aussi quand l'utilisateur demande
+    un renvoi de code (POST /api/auth/resend-code).
+    """
+    # Un nombre aléatoire à 6 chiffres, toujours écrit sur 6 caractères
+    # (ex: "007421" et pas juste "7421").
+    code = f"{random.randint(0, 999999):06d}"
+
+    user.code_verification = code
+    user.code_verification_envoye_le = timezone.now()
+    user.save()
+
+    send_mail(
+        subject="Votre code de vérification Sama-Terrain",
+        message=(
+            f"Bonjour {user.prenom},\n\n"
+            f"Voici votre code de vérification : {code}\n\n"
+            "Ce code est valable 15 minutes."
+        ),
+        from_email=None,  # utilise DEFAULT_FROM_EMAIL défini dans settings.py
+        recipient_list=[user.email],
+    )
