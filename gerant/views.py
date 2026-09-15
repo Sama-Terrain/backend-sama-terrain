@@ -351,7 +351,10 @@ class ChatbotView(APIView):
             reponse = requests.post(
                 f"{settings.IA_SERVICE_URL}/chatbot",
                 json={'message': message},
-                timeout=15,
+                # Doit rester nettement supérieur au timeout LLM côté
+                # service IA (45s, voir IA/llm.py) pour laisser une marge
+                # de sécurité (réseau, requêtes DB) avant de couper.
+                timeout=60,
             )
             reponse.raise_for_status()
             return Response(reponse.json())

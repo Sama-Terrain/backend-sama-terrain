@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
@@ -341,6 +341,159 @@ class UtilisateursListView(APIView):
             })
 
         return Response(utilisateurs)
+
+
+class ToggleActifUtilisateurView(APIView):
+    """
+    PATCH /api/admin/utilisateurs/<int:pk>/toggle-actif/
+
+    Active ou suspend un compte (bascule is_active). Un admin ne peut pas
+    se suspendre lui-même, pour ne jamais se retrouver bloqué hors de son
+    propre espace.
+    """
+
+    permission_classes = [EstAdmin]
+
+    def patch(self, request, pk):
+        utilisateur = User.objects.filter(pk=pk).first()
+        if utilisateur is None:
+            return Response({'detail': "Utilisateur introuvable."}, status=status.HTTP_404_NOT_FOUND)
+
+        if utilisateur.id == request.user.id:
+            return Response(
+                {'detail': "Vous ne pouvez pas suspendre votre propre compte."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        utilisateur.is_active = not utilisateur.is_active
+        utilisateur.save()
+
+        return Response({'id': utilisateur.id, 'actif': utilisateur.is_active})
+
+
+class SupprimerUtilisateurView(APIView):
+    """
+    DELETE /api/admin/utilisateurs/<int:pk>/
+
+    Supprime définitivement un compte (et tout ce qui en dépend en cascade :
+    terrains, réservations, avis...). Un admin ne peut pas se supprimer
+    lui-même, ni supprimer un autre admin (à faire depuis la base si
+    vraiment nécessaire, pour éviter un clic malheureux qui viderait
+    l'espace admin).
+    """
+
+    permission_classes = [EstAdmin]
+
+    def delete(self, request, pk):
+        utilisateur = User.objects.filter(pk=pk).first()
+        if utilisateur is None:
+            return Response({'detail': "Utilisateur introuvable."}, status=status.HTTP_404_NOT_FOUND)
+
+        if utilisateur.id == request.user.id:
+            return Response(
+                {'detail': "Vous ne pouvez pas supprimer votre propre compte."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if utilisateur.role == User.Role.ADMIN:
+            return Response(
+                {'detail': "Un compte administrateur ne peut pas être supprimé depuis cette page."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        utilisateur.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AdminGerantDetailView(APIView):
+    """
+    GET /api/admin/utilisateurs/<int:user_id>/gerant-detail/
+
+    Vue détaillée d'un gérant précis pour l'admin : ses terrains, son
+    abonnement, ses revenus et l'historique de ses paiements. Répond aux
+    questions "combien gagne ce gérant ?", "où en est son abonnement ?",
+    posées à la page "Gestion des utilisateurs" (bouton "Voir").
+    """
+
+    permission_classes = [EstAdmin]
+
+    def get(self, request, user_id):
+        gerant = User.objects.filter(pk=user_id, role=User.Role.GERANT).first()
+        if gerant is None:
+            return Response({'detail': "Gérant introuvable."}, status=status.HTTP_404_NOT_FOUND)
+
+        terrains = Terrain.objects.filter(gerant=gerant)
+        terrains_data = [
+            {
+                'id': t.id,
+                'nom': t.nom,
+                'ville': t.ville,
+                'actif': t.actif,
+                'prix_heure': t.prix_heure,
+                'note_moyenne': float(t.note_moyenne),
+                'nombre_avis': t.nombre_avis,
+            }
+            for t in terrains
+        ]
+
+        paiements = Paiement.objects.filter(
+            Q(reservation__creneau__terrain__gerant=gerant) | Q(abonnement__gerant=gerant)
+        ).order_by('-cree_le')
+
+        revenus_terrains = paiements.filter(
+            type__in=[Paiement.Type.AVANCE, Paiement.Type.SOLDE]
+        )
+        revenus_totaux = revenus_terrains.aggregate(total=Sum('montant'))['total'] or 0
+        debut_mois = timezone.localdate().replace(day=1)
+        revenus_mois = revenus_terrains.filter(
+            cree_le__date__gte=debut_mois
+        ).aggregate(total=Sum('montant'))['total'] or 0
+
+        abonnement = Abonnement.objects.filter(gerant=gerant).first()
+        abonnement_data = None
+        if abonnement:
+            abonnement_data = {
+                'statut': abonnement.statut,
+                'date_fin_essai': abonnement.date_fin_essai,
+                'date_fin_abonnement': abonnement.date_fin_abonnement,
+                'est_actif': abonnement.est_actif,
+            }
+
+        def serialiser_paiement(p):
+            return {
+                'id': p.id,
+                'type': p.type,
+                'montant': p.montant,
+                'moyen_paiement': p.moyen_paiement,
+                'cree_le': p.cree_le,
+            }
+
+        # Séparés explicitement : l'un est de l'argent que le gérant REÇOIT
+        # (ses clients), l'autre de l'argent qu'il PAIE (son abonnement
+        # mensuel à la plateforme) — les mélanger prêterait à confusion.
+        paiements_recus = [
+            serialiser_paiement(p) for p in paiements
+            if p.type in (Paiement.Type.AVANCE, Paiement.Type.SOLDE)
+        ][:20]
+        paiements_abonnement = [
+            serialiser_paiement(p) for p in paiements
+            if p.type == Paiement.Type.ABONNEMENT
+        ][:20]
+
+        return Response({
+            'gerant': {
+                'id': gerant.id,
+                'nom': f"{gerant.prenom} {gerant.nom}",
+                'email': gerant.email,
+            },
+            'terrains': terrains_data,
+            'nombre_terrains': len(terrains_data),
+            'revenus_totaux': revenus_totaux,
+            'revenus_mois': revenus_mois,
+            'abonnement': abonnement_data,
+            'paiements_recus': paiements_recus,
+            'paiements_abonnement': paiements_abonnement,
+        })
 
 
 class GerantsListView(APIView):
