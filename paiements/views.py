@@ -108,6 +108,7 @@ class PaiementIPNView(APIView):
         notifier_n8n('reservation_confirmee', {
             'email_amateur': reservation.amateur.email,
             'nom_amateur': reservation.amateur.prenom,
+            'telephone_amateur': reservation.telephone,
             'terrain': creneau.terrain.nom,
             'date': str(creneau.date),
             'heure': str(creneau.heure_debut),
@@ -239,6 +240,7 @@ class RappelsReservationsView(APIView):
             notifier_n8n('rappel_reservation', {
                 'email_amateur': reservation.amateur.email,
                 'nom_amateur': reservation.amateur.prenom,
+                'telephone_amateur': reservation.telephone,
                 'terrain': creneau.terrain.nom,
                 'date': str(creneau.date),
                 'heure': str(creneau.heure_debut),
