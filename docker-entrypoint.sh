@@ -36,4 +36,4 @@ echo "Démarrage du serveur..."
 # jusqu'à 60s une réponse du LLM (voir gerant/views.py ChatbotView) ; le
 # timeout par défaut de Gunicorn (30s) tuait le worker avant la fin de
 # cette requête, provoquant une 500 côté frontend.
-exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 75 --reload
+exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 75
