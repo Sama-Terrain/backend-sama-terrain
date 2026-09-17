@@ -28,6 +28,10 @@ class User(AbstractUser):
     prenom = models.CharField(max_length=150)
     nom = models.CharField(max_length=150)
 
+    # Renseignés par l'utilisateur depuis sa page "Profil" (facultatifs).
+    telephone = models.CharField(max_length=20, blank=True)
+    ville_preferee = models.CharField(max_length=100, blank=True)
+
     # Le rôle de l'utilisateur. Par défaut, un nouvel inscrit est un "amateur".
     role = models.CharField(
         max_length=10,

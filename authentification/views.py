@@ -14,6 +14,7 @@ from .serializers import (
     LogoutSerializer,
     RegisterSerializer,
     ResendCodeSerializer,
+    UpdateProfilSerializer,
     UserSerializer,
     VerifyEmailSerializer,
 )
@@ -174,16 +175,22 @@ class LogoutView(APIView):
 
 class MeView(APIView):
     """
-    GET /api/auth/me
-
-    Renvoie les infos de l'utilisateur actuellement connecté, à partir
-    du token JWT envoyé dans le header Authorization.
+    GET   /api/auth/me : infos de l'utilisateur connecté, à partir du token JWT.
+    PATCH /api/auth/me : modifie son propre profil (page "Profil").
     """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
+
+    def patch(self, request):
+        serializer = UpdateProfilSerializer(request.user, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer.save()
+        return Response(UserSerializer(request.user).data)
 
 
 class DevenirGerantView(APIView):

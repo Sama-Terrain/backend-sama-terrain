@@ -23,7 +23,21 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'email', 'prenom', 'nom', 'role', 'email_verifie']
+        fields = [
+            'id', 'email', 'prenom', 'nom', 'telephone', 'ville_preferee',
+            'role', 'email_verifie', 'date_joined',
+        ]
+
+
+class UpdateProfilSerializer(serializers.ModelSerializer):
+    """
+    Utilisé pour PATCH /api/auth/me (page "Profil" de l'espace amateur).
+    L'email et le rôle ne sont volontairement pas modifiables ici.
+    """
+
+    class Meta:
+        model = User
+        fields = ['prenom', 'nom', 'telephone', 'ville_preferee']
 
 
 class RegisterSerializer(serializers.ModelSerializer):
