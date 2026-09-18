@@ -17,17 +17,15 @@ class UserManager(BaseUserManager):
 
         email = self.normalize_email(email)
 
+        # Comme AbstractUser conserve le champ username,
+        # on le remplit automatiquement avec l'email.
+        extra_fields.setdefault("username", email)
+
         # On crée l'utilisateur avec l'email et les champs supplémentaires
         user = self.model(
             email=email,
             **extra_fields
         )
-
-        # On utilise la méthode set_password pour hasher le mot de passe avant de le sauvegarder
-        user.set_password(password)
-        user.save(using=self._db)
-
-        return user
 
     
     def create_superuser(self, email, password=None, **extra_fields):
