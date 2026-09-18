@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from .managers import UserManager
 
 
 class User(AbstractUser):
@@ -59,6 +60,9 @@ class User(AbstractUser):
     # mais on le remplit automatiquement avec l'email (voir views.py) :
     # l'utilisateur, lui, n'a jamais besoin de le connaître.
     REQUIRED_FIELDS = ['prenom', 'nom']
+
+    # On indique à Django que c'est notre UserManager personnalisé qui gère ce modèle.
+    objects = UserManager()
 
     def __str__(self):
         return f"{self.email} ({self.role})"
