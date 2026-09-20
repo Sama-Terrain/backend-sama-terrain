@@ -1,4 +1,7 @@
+from django.utils import timezone
 from rest_framework import serializers
+
+from reservations.models import Reservation
 
 from .models import Ticket
 
@@ -47,7 +50,28 @@ class ValiderTicketSerializer(serializers.Serializer):
             raise serializers.ValidationError("Ce ticket ne concerne pas un de vos terrains.")
 
         if ticket.utilise:
-            raise serializers.ValidationError("Ce ticket a déjà été utilisé.")
+            raise serializers.ValidationError(
+                f"Ce ticket a déjà été utilisé le {ticket.utilise_le.strftime('%d/%m/%Y à %H:%M')}."
+            )
+
+        # Une réservation annulée après paiement garde son ticket en base
+        # (on ne supprime jamais l'historique) : il ne doit plus jamais
+        # pouvoir être validé à l'entrée.
+        if ticket.reservation.statut == Reservation.Statut.ANNULEE:
+            raise serializers.ValidationError("Cette réservation a été annulée : ce ticket n'est plus valide.")
+
+        # Le ticket n'est valable que le jour même du match : ni avant
+        # (le match n'a pas encore eu lieu), ni après (créneau déjà passé).
+        date_match = ticket.reservation.creneau.date
+        aujourdhui = timezone.localdate()
+        if date_match != aujourdhui:
+            if date_match > aujourdhui:
+                raise serializers.ValidationError(
+                    f"Ce ticket est valable le {date_match.strftime('%d/%m/%Y')}, pas aujourd'hui."
+                )
+            raise serializers.ValidationError(
+                f"Ce ticket concernait le {date_match.strftime('%d/%m/%Y')} : la date est passée."
+            )
 
         self.ticket = ticket
         return value
