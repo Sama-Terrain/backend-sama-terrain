@@ -20,13 +20,23 @@ def generer_et_envoyer_code(user):
     user.code_verification_envoye_le = timezone.now()
     user.save()
 
-    send_mail(
-        subject="Votre code de vérification Sama-Terrain",
-        message=(
-            f"Bonjour {user.prenom},\n\n"
-            f"Voici votre code de vérification : {code}\n\n"
-            "Ce code est valable 15 minutes."
-        ),
-        from_email=None,  # utilise DEFAULT_FROM_EMAIL défini dans settings.py
-        recipient_list=[user.email],
-    )
+    # Le compte est déjà créé/sauvegardé à ce stade : si l'envoi échoue
+    # (SMTP Gmail lent ou bloqué, par ex. sur certains hébergeurs), on ne
+    # doit pas faire planter la requête (500) alors que l'inscription a
+    # réellement réussi côté base de données. L'utilisateur pourra toujours
+    # redemander un code via /auth/resend-code.
+    try:
+        send_mail(
+            subject="Votre code de vérification Sama-Terrain",
+            message=(
+                f"Bonjour {user.prenom},\n\n"
+                f"Voici votre code de vérification : {code}\n\n"
+                "Ce code est valable 15 minutes."
+            ),
+            from_email=None,  # utilise DEFAULT_FROM_EMAIL défini dans settings.py
+            recipient_list=[user.email],
+        )
+    except Exception as erreur:
+        # On affiche juste l'erreur dans les logs du serveur (visible sur
+        # Render par exemple), sans bloquer l'inscription qui a déjà réussi.
+        print(f"Erreur lors de l'envoi de l'email à {user.email} : {erreur}")

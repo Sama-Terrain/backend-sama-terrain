@@ -54,14 +54,27 @@ class RegisterSerializer(serializers.ModelSerializer):
     # (longueur minimale, pas trop commun, etc.)
     password = serializers.CharField(write_only=True, validators=[validate_password])
 
+    # Par défaut, DRF ajoute automatiquement un contrôle "email déjà pris"
+    # sur ce champ (car il est unique=True dans le modèle User), et ce
+    # contrôle s'exécute AVANT notre validate_email() ci-dessous. Il faut
+    # donc redéclarer le champ sans ce contrôle automatique pour pouvoir
+    # gérer nous-mêmes le cas d'un compte jamais vérifié (voir plus bas).
+    email = serializers.EmailField()
+
     class Meta:
         model = User
         fields = ['prenom', 'nom', 'email', 'password', 'confirmPassword']
 
     def validate_email(self, value):
-        """Refuse l'inscription si l'email est déjà utilisé."""
-        if User.objects.filter(email__iexact=value).exists():
-            raise serializers.ValidationError("Un compte existe déjà avec cet email.")
+        """Refuse l'inscription si l'email est déjà utilisé par un compte vérifié."""
+        existant = User.objects.filter(email__iexact=value).first()
+        if existant:
+            if existant.email_verifie:
+                raise serializers.ValidationError("Un compte existe déjà avec cet email.")
+            # Compte créé mais jamais vérifié (ex : l'envoi du code a échoué
+            # la première fois) : on le supprime pour permettre une nouvelle
+            # tentative d'inscription plutôt que de bloquer l'utilisateur.
+            existant.delete()
         return value
 
     def validate(self, data):
