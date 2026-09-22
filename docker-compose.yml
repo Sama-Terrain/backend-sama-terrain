@@ -53,6 +53,24 @@ services:
       db:
         condition: service_healthy
 
+  # Application React/Vite (frontend)
+  frontend:
+    build: ../frontend
+    restart: unless-stopped
+    env_file:
+      - ../frontend/.env
+    ports:
+      - "5173:5173"
+    volumes:
+      # Même logique que pour le backend : le code de l'hôte est monté, donc
+      # les changements prennent effet sans reconstruire l'image (hot reload Vite).
+      - ../frontend:/app
+      # On évite d'écraser le node_modules du conteneur (installé pour Linux)
+      # par celui de l'hôte (potentiellement installé pour un autre OS).
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      - backend
+
   # Micro-service IA (FastAPI), séparé de Django (voir dossier IA/) :
   # analyse de la demande / prix recommandés, et chatbot d'assistance.
   ia:
@@ -82,3 +100,4 @@ volumes:
   postgres_data:
   media_data:
   ia_hf_cache:
+  frontend_node_modules:
