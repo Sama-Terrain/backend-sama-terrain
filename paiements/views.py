@@ -1,4 +1,5 @@
 from datetime import timedelta
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.utils import timezone
@@ -34,6 +35,7 @@ class InitierPaiementView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         reservation = serializer.validated_data['reservation']
+        moyen_paiement = serializer.validated_data['moyen_paiement']
         terrain = reservation.creneau.terrain
 
         # PayTech refuse un ref_command déjà utilisé (erreur 409). On ajoute
@@ -52,9 +54,28 @@ class InitierPaiementView(APIView):
             # de la sortie du site pour aller payer).
             success_url=f"{settings.FRONTEND_URL}/paiement/succes?reservation={reservation.id}",
             cancel_url=f"{settings.FRONTEND_URL}/paiement/annule?reservation={reservation.id}",
+            # Le moyen déjà choisi dans notre interface : PayTech saute alors
+            # sa propre page de choix du moyen de paiement.
+            target_payment=moyen_paiement,
         )
 
-        return Response({'payment_url': resultat['payment_url']}, status=status.HTTP_200_OK)
+        # `reservation.telephone` est stocké au format "221XXXXXXXXX" (voir
+        # DetailTerrain.jsx). On l'utilise pour pré-remplir et auto-valider
+        # la page PayTech (paramètres documentés par PayTech), afin que
+        # l'amateur arrive directement sur l'écran de paiement (QR code Wave,
+        # ou saisie OTP Orange Money) sans ressaisir son numéro.
+        telephone_national = reservation.telephone.removeprefix('221')
+        parametres_prefill = urlencode({
+            'pn': f"+{reservation.telephone}",
+            'nn': telephone_national,
+            'fn': f"{reservation.amateur.prenom} {reservation.amateur.nom}",
+            'tp': moyen_paiement,
+            'nac': '1',
+        })
+        separateur = '&' if '?' in resultat['payment_url'] else '?'
+        payment_url = f"{resultat['payment_url']}{separateur}{parametres_prefill}"
+
+        return Response({'payment_url': payment_url}, status=status.HTTP_200_OK)
 
 
 class PaiementIPNView(APIView):
