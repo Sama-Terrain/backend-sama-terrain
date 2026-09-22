@@ -270,6 +270,11 @@ class DevenirGerantSerializer(serializers.ModelSerializer):
     confirmPassword = serializers.CharField(write_only=True)
     password = serializers.CharField(write_only=True, validators=[validate_password])
 
+    # Comme pour RegisterSerializer : on redéclare le champ pour retirer le
+    # contrôle d'unicité automatique de DRF, qui s'exécuterait avant notre
+    # validate_email() et empêcherait de gérer le cas d'un compte jamais vérifié.
+    email = serializers.EmailField()
+
     # Champs du modèle DemandeGerant, saisis en même temps que le compte.
     nom_complexe = serializers.CharField(max_length=150)
     quartier = serializers.CharField(max_length=100)
@@ -285,8 +290,16 @@ class DevenirGerantSerializer(serializers.ModelSerializer):
         ]
 
     def validate_email(self, value):
-        if User.objects.filter(email__iexact=value).exists():
-            raise serializers.ValidationError("Un compte existe déjà avec cet email.")
+        """Refuse la demande si l'email est déjà utilisé par un compte vérifié."""
+        existant = User.objects.filter(email__iexact=value).first()
+        if existant:
+            if existant.email_verifie:
+                raise serializers.ValidationError("Un compte existe déjà avec cet email.")
+            # Compte jamais vérifié (ex : l'envoi du code a échoué la première
+            # fois) : on le supprime pour permettre une nouvelle tentative
+            # plutôt que de bloquer l'utilisateur. La demande gérant et
+            # l'abonnement liés partent avec lui (cascade).
+            existant.delete()
         return value
 
     def validate(self, data):
