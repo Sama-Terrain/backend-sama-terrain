@@ -8,6 +8,11 @@ class InitierPaiementSerializer(serializers.Serializer):
 
     reservation = serializers.PrimaryKeyRelatedField(queryset=Reservation.objects.all())
 
+    # Le moyen déjà choisi par l'amateur dans notre interface (PaiementMethode.jsx) :
+    # on le transmet à PayTech pour l'envoyer directement sur la bonne page de
+    # paiement, sans lui refaire choisir un moyen de paiement.
+    moyen_paiement = serializers.ChoiceField(choices=['Wave', 'Orange Money'])
+
     def validate_reservation(self, reservation):
         request = self.context['request']
         if reservation.amateur_id != request.user.id:
