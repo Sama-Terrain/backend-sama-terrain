@@ -6,9 +6,17 @@ class Terrain(models.Model):
     """
     Un terrain de mini-foot publié par un gérant.
 
-    Les choix (TYPES, VILLES, SURFACES) reprennent exactement les listes
-    utilisées dans le formulaire du frontend (AjouterTerrain.jsx), pour que
-    les valeurs envoyées par le frontend correspondent toujours à un choix valide.
+    Les choix (TYPES, SURFACES) reprennent exactement les listes utilisées
+    dans le formulaire du frontend (AjouterTerrain.jsx), pour que les valeurs
+    envoyées par le frontend correspondent toujours à un choix valide.
+
+    La ville, elle, n'est volontairement PAS une liste fermée (`choices`) :
+    la liste de quartiers du frontend (voir frontend/src/utils/villes.js)
+    évolue régulièrement, et un `choices` figé ici obligerait à resynchroniser
+    les deux côtés à chaque ajout — ce qui a déjà cassé la création de
+    terrain une fois. Un simple CharField laisse passer n'importe quelle
+    valeur envoyée par le frontend, qui reste la seule source de vérité
+    pour la liste affichée aux gérants.
     """
 
     TYPES = [
@@ -16,17 +24,6 @@ class Terrain(models.Model):
         ('Foot à 6', 'Foot à 6'),
         ('Foot à 7', 'Foot à 7'),
         ('Foot à 11', 'Foot à 11'),
-    ]
-
-    VILLES = [
-        ('Dakar', 'Dakar'),
-        ('Mermoz', 'Mermoz'),
-        ('Guédiawaye', 'Guédiawaye'),
-        ('Almadies', 'Almadies'),
-        ('Yoff', 'Yoff'),
-        ('Thiès', 'Thiès'),
-        ('Saly', 'Saly'),
-        ('Mbour', 'Mbour'),
     ]
 
     SURFACES = [
@@ -46,7 +43,7 @@ class Terrain(models.Model):
 
     nom = models.CharField(max_length=150)
     type = models.CharField(max_length=20, choices=TYPES)
-    ville = models.CharField(max_length=30, choices=VILLES)
+    ville = models.CharField(max_length=100)
     adresse = models.CharField(max_length=255)
     capacite = models.PositiveIntegerField(help_text="Nombre de joueurs")
     surface = models.CharField(max_length=20, choices=SURFACES)
