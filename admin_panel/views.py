@@ -543,6 +543,15 @@ class ValiderGerantView(APIView):
         abonnement.date_fin_essai = timezone.now() + timedelta(days=DUREE_ESSAI_JOURS)
         abonnement.save()
 
+        notifier_n8n('demande_gerant_validee', {
+            'email_gerant': demande.user.email,
+            'nom_gerant': demande.user.prenom,
+            # Stocké avec un "+" (voir DevenirGerant.jsx) : l'API WhatsApp
+            # Business veut le numéro international SANS le "+".
+            'telephone_gerant': demande.whatsapp.lstrip('+'),
+            'date_fin_essai': str(abonnement.date_fin_essai.date()),
+        })
+
         return Response({'message': "Gérant validé. Compte activé avec 7 jours d'essai gratuit."})
 
 
