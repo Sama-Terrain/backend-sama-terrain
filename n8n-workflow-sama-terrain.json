@@ -165,6 +165,30 @@
               },
               "renameOutput": true,
               "outputKey": "demande_gerant_rejetee"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "c6",
+                    "leftValue": "={{ $json.body.evenement }}",
+                    "rightValue": "demande_gerant_validee",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "demande_gerant_validee"
             }
           ]
         },
@@ -385,6 +409,54 @@
           "name": "WhatsApp account"
         }
       }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.body.email_gerant }}",
+        "subject": "Votre demande de gérant Sama-Terrain a été approuvée !",
+        "emailType": "text",
+        "message": "=Bonjour {{ $json.body.nom_gerant }},\n\nBonne nouvelle : votre demande pour devenir gérant sur Sama-Terrain a été approuvée !\n\nVous pouvez dès maintenant vous connecter avec l'email et le mot de passe choisis à l'inscription. Vous bénéficiez de 7 jours d'essai gratuit, jusqu'au {{ $json.body.date_fin_essai }}.\n\nBienvenue sur Sama-Terrain !",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -528,
+        2176
+      ],
+      "id": "d4e5f6a7-b8c9-4071-8a9b-1c2d3e4f5a6b",
+      "name": "Email - Demande gérant validée",
+      "webhookId": "ece06071-f127-4ff5-a56f-4b2ab4d65fd5",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "CK6sxjNXVgI2Eb8a",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1237481382791698",
+        "recipientPhoneNumber": "={{ $json.body.telephone_gerant }}",
+        "textBody": "=Bonne nouvelle {{ $json.body.nom_gerant }} ! Votre demande pour devenir gérant sur Sama-Terrain a été approuvée. Connectez-vous avec votre email et votre mot de passe pour accéder à votre espace (7 jours d'essai gratuit jusqu'au {{ $json.body.date_fin_essai }}).",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        -528,
+        2368
+      ],
+      "id": "e5f6a7b8-c9d0-4071-8a9b-2d3e4f5a6b7c",
+      "name": "WhatsApp - Demande gérant validée",
+      "webhookId": "f191g5e6-26e5-6f73-c922-g40g48e74f0a",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "tXmWBcKKloMIdmwH",
+          "name": "WhatsApp account"
+        }
+      }
     }
   ],
   "connections": {
@@ -449,6 +521,18 @@
         [
           {
             "node": "Email - Demande gérant rejetée",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email - Demande gérant validée",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "WhatsApp - Demande gérant validée",
             "type": "main",
             "index": 0
           }
@@ -533,6 +617,28 @@
       ]
     },
     "WhatsApp - Rappel réservation": {
+      "main": [
+        [
+          {
+            "node": "Répondre OK1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email - Demande gérant validée": {
+      "main": [
+        [
+          {
+            "node": "Répondre OK1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp - Demande gérant validée": {
       "main": [
         [
           {
