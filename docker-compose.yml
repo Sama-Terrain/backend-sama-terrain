@@ -3,83 +3,79 @@ services:
   # Base de données PostgreSQL
   db:
     image: postgres:16-alpine
+    container_name: sama_terrain_db
     restart: unless-stopped
+
     environment:
-      POSTGRES_DB: sama_terrain
-      POSTGRES_USER: sama_user
-      POSTGRES_PASSWORD: sama_password
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       # Les données Postgres survivent aux redémarrages/rebuilds du conteneur.
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      # Pratique pour se connecter à la base depuis un outil externe
-      # (ex: DBeaver, pgAdmin) pendant le développement.
-      - "5432:5432"
+
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sama_user -d sama_terrain"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   # API Django
   backend:
-    build: .
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    
+    container_name: sama_terrain_backend
     restart: unless-stopped
     env_file:
       - .env
     environment:
       # Écrase la valeur du .env (vide/sqlite en local) pour pointer vers
       # le conteneur "db" ci-dessus, joignable par son nom de service.
-      DATABASE_URL: postgres://sama_user:sama_password@db:5432/sama_terrain
-      # Le "db" doit être dans ALLOWED_HOSTS/CSRF si appelé par son nom
-      # de conteneur ; on ajoute aussi le nom du service backend lui-même,
-      # ET le domaine ngrok (nécessaire pour que PayTech puisse appeler
-      # notre IPN depuis l'extérieur pendant les tests).
-      ALLOWED_HOSTS: localhost,127.0.0.1,backend,illegibly-superdubious-alayah.ngrok-free.dev
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       # Le service IA tourne dans son propre conteneur, joignable par son
       # nom de service sur le réseau Docker interne.
       IA_SERVICE_URL: http://ia:8001
     ports:
       - "8000:8000"
     volumes:
-      # Monte le code depuis l'hôte : modifier un fichier Python ici prend
-      # effet dans le conteneur sans avoir à reconstruire l'image (pratique
-      # en dev). En production, on retirerait cette ligne (code figé au build).
-      - .:/app
       # Les fichiers uploadés (photos de terrains, documents gérants...)
       # survivent aux redémarrages du conteneur.
       - media_data:/app/media
     depends_on:
       db:
         condition: service_healthy
-
+      ia:
+        condition: service_started
+  
   # Application React/Vite (frontend)
   frontend:
-    build: ../frontend
-    restart: unless-stopped
-    env_file:
-      - ../frontend/.env
-    ports:
-      - "5173:5173"
-    volumes:
-      # Même logique que pour le backend : le code de l'hôte est monté, donc
-      # les changements prennent effet sans reconstruire l'image (hot reload Vite).
-      - ../frontend:/app
-      # On évite d'écraser le node_modules du conteneur (installé pour Linux)
-      # par celui de l'hôte (potentiellement installé pour un autre OS).
-      - frontend_node_modules:/app/node_modules
+    build:
+      context: ../frontend-sama-terrain
+      dockerfile: Dockerfile
+    
+    container_name: sama_terrain_frontend     
+    restart: unless-stopped      
+
+    ports:       
+      - "5173:80"
+
     depends_on:
       - backend
 
   # Micro-service IA (FastAPI), séparé de Django (voir dossier IA/) :
   # analyse de la demande / prix recommandés, et chatbot d'assistance.
   ia:
-    build: ../IA
+    build: 
+     context: ../ia-sama-terrain
+     dockerfile: Dockerfile
+
     restart: unless-stopped
     env_file:
-      - ../IA/.env
+      - ../ia-sama-terrain/.env
     environment:
-      DATABASE_URL: postgresql://sama_user:sama_password@db:5432/sama_terrain
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       # Le téléchargement "xet" (rapide) de HuggingFace échoue parfois selon
       # le réseau : on force le téléchargement HTTP classique, plus lent
       # mais plus fiable.
@@ -87,7 +83,6 @@ services:
     ports:
       - "8001:8001"
     volumes:
-      - ../IA:/app
       # Cache du modèle d'embeddings HuggingFace : évite de le retélécharger
       # à chaque redémarrage du conteneur (le réseau vers HF peut être
       # instable, autant ne payer ce coût qu'une seule fois).
@@ -98,6 +93,9 @@ services:
 
 volumes:
   postgres_data:
+    name: sama_terrain_postgres_data
   media_data:
+    name: sama_terrain_media_data
   ia_hf_cache:
-  frontend_node_modules:
+    name: sama_terrain_ia_hf_cache
+
