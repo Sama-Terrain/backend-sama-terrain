@@ -2,11 +2,14 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from .views import (
+    ChangerMotDePasseView,
     DevenirGerantView,
     GoogleAuthView,
     LoginView,
     LogoutView,
     MeView,
+    MotDePasseOublieView,
+    ReinitialiserMotDePasseView,
     RegisterView,
     ResendCodeView,
     VerifyEmailView,
@@ -22,4 +25,7 @@ urlpatterns = [
     path('logout', LogoutView.as_view(), name='auth-logout'),
     path('token/refresh', TokenRefreshView.as_view(), name='auth-token-refresh'),
     path('me', MeView.as_view(), name='auth-me'),
+    path('mot-de-passe', ChangerMotDePasseView.as_view(), name='auth-changer-mot-de-passe'),
+    path('mot-de-passe-oublie', MotDePasseOublieView.as_view(), name='auth-mot-de-passe-oublie'),
+    path('reinitialiser-mot-de-passe', ReinitialiserMotDePasseView.as_view(), name='auth-reinitialiser-mot-de-passe'),
 ]

@@ -334,3 +334,76 @@ class DevenirGerantSerializer(serializers.ModelSerializer):
         Abonnement.objects.create(gerant=user)  # statut par défaut : en_attente_validation
 
         return user
+
+
+class ChangerMotDePasseSerializer(serializers.Serializer):
+    """
+    Utilisé pour PATCH /api/auth/mot-de-passe : un utilisateur déjà connecté
+    (amateur ou gérant) change son mot de passe en connaissant l'ancien.
+    """
+
+    ancien_mot_de_passe = serializers.CharField(write_only=True)
+    nouveau_mot_de_passe = serializers.CharField(write_only=True, validators=[validate_password])
+
+    def validate_ancien_mot_de_passe(self, value):
+        user = self.context['request'].user
+        if not user.check_password(value):
+            raise serializers.ValidationError("Mot de passe actuel incorrect.")
+        return value
+
+    def save(self):
+        user = self.context['request'].user
+        user.set_password(self.validated_data['nouveau_mot_de_passe'])
+        user.save()
+
+
+class MotDePasseOublieSerializer(serializers.Serializer):
+    """
+    Utilisé pour POST /api/auth/mot-de-passe-oublie : envoie un code à 6
+    chiffres par email, réutilisant les mêmes champs que la vérification
+    d'email (un compte ne fait jamais les deux choses en même temps).
+    """
+
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        try:
+            self.user = User.objects.get(email__iexact=value)
+        except User.DoesNotExist:
+            raise serializers.ValidationError("Aucun compte avec cet email.")
+        return value
+
+
+class ReinitialiserMotDePasseSerializer(serializers.Serializer):
+    """
+    Utilisé pour POST /api/auth/reinitialiser-mot-de-passe : vérifie le code
+    reçu par email puis définit le nouveau mot de passe.
+    """
+
+    email = serializers.EmailField()
+    code = serializers.CharField(max_length=6)
+    nouveau_mot_de_passe = serializers.CharField(write_only=True, validators=[validate_password])
+
+    def validate(self, data):
+        try:
+            user = User.objects.get(email__iexact=data['email'])
+        except User.DoesNotExist:
+            raise serializers.ValidationError({'email': "Aucun compte avec cet email."})
+
+        if not user.code_verification or user.code_verification != data['code']:
+            raise serializers.ValidationError({'code': "Code invalide."})
+
+        expire = user.code_verification_envoye_le + timedelta(minutes=15)
+        if timezone.now() > expire:
+            raise serializers.ValidationError({'code': "Ce code a expiré, demandez-en un nouveau."})
+
+        self.user = user
+        return data
+
+    def save(self):
+        self.user.set_password(self.validated_data['nouveau_mot_de_passe'])
+        # Le code est à usage unique : on l'efface pour qu'il ne puisse pas
+        # servir à réinitialiser le mot de passe une seconde fois.
+        self.user.code_verification = None
+        self.user.code_verification_envoye_le = None
+        self.user.save()

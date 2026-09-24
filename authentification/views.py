@@ -8,17 +8,20 @@ from rest_framework.parsers import FormParser, MultiPartParser
 
 from .models import User
 from .serializers import (
+    ChangerMotDePasseSerializer,
     DevenirGerantSerializer,
     GoogleAuthSerializer,
     LoginSerializer,
     LogoutSerializer,
+    MotDePasseOublieSerializer,
+    ReinitialiserMotDePasseSerializer,
     RegisterSerializer,
     ResendCodeSerializer,
     UpdateProfilSerializer,
     UserSerializer,
     VerifyEmailSerializer,
 )
-from .utils import generer_et_envoyer_code
+from .utils import generer_et_envoyer_code, generer_et_envoyer_code_reinitialisation
 from paiements.n8n import notifier_n8n
 
 
@@ -236,3 +239,66 @@ class DevenirGerantView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+class ChangerMotDePasseView(APIView):
+    """
+    PATCH /api/auth/mot-de-passe
+
+    Un amateur ou un gérant déjà connecté change son mot de passe en
+    fournissant l'ancien (aucun impact sur les tokens JWT déjà émis, ils
+    restent valables jusqu'à expiration normale).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request):
+        serializer = ChangerMotDePasseSerializer(data=request.data, context={'request': request})
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer.save()
+        return Response({'message': "Mot de passe modifié avec succès."})
+
+
+class MotDePasseOublieView(APIView):
+    """
+    POST /api/auth/mot-de-passe-oublie
+
+    Reçoit {email}. Envoie un code à 6 chiffres par email pour permettre à
+    l'utilisateur de définir un nouveau mot de passe (voir reinitialiser-mot-de-passe).
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = MotDePasseOublieSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        generer_et_envoyer_code_reinitialisation(serializer.user)
+
+        return Response({
+            'message': "Un code de réinitialisation a été envoyé par email.",
+            'email': serializer.user.email,
+        })
+
+
+class ReinitialiserMotDePasseView(APIView):
+    """
+    POST /api/auth/reinitialiser-mot-de-passe
+
+    Reçoit {email, code, nouveau_mot_de_passe}. Si le code est bon et pas
+    expiré, définit le nouveau mot de passe : l'utilisateur peut alors se
+    reconnecter normalement avec son email.
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = ReinitialiserMotDePasseSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer.save()
+        return Response({'message': "Mot de passe réinitialisé avec succès."})
