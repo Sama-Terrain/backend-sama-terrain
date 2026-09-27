@@ -15,6 +15,7 @@ class ReservationSerializer(serializers.ModelSerializer):
 
     terrain_id = serializers.IntegerField(source='creneau.terrain.id', read_only=True)
     terrain_nom = serializers.CharField(source='creneau.terrain.nom', read_only=True)
+    terrain_image = serializers.SerializerMethodField()
     date = serializers.DateField(source='creneau.date', read_only=True)
     heure_debut = serializers.TimeField(source='creneau.heure_debut', read_only=True)
     heure_fin = serializers.TimeField(source='creneau.heure_fin', read_only=True)
@@ -27,9 +28,19 @@ class ReservationSerializer(serializers.ModelSerializer):
             'id', 'statut', 'nom_complet', 'telephone',
             'montant_avance', 'montant_total', 'reste_a_payer',
             'moyen_paiement', 'transaction_id', 'cree_le',
-            'terrain_id', 'terrain_nom', 'date', 'heure_debut', 'heure_fin',
+            'terrain_id', 'terrain_nom', 'terrain_image', 'date', 'heure_debut', 'heure_fin',
             'ticket',
         ]
+
+    def get_terrain_image(self, reservation):
+        # Même logique que TerrainListSerializer.get_image : la première
+        # photo du terrain sert de vignette pour la carte de réservation.
+        premiere_photo = reservation.creneau.terrain.photos.first()
+        if not premiere_photo:
+            return None
+        request = self.context.get('request')
+        url = premiere_photo.image.url
+        return request.build_absolute_uri(url) if request else url
 
     def get_ticket(self, reservation):
         # Le ticket n'existe qu'une fois le paiement confirmé par l'IPN

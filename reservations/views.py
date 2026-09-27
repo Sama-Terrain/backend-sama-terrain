@@ -28,7 +28,7 @@ class ReservationCreateView(APIView):
 
         reservation = serializer.save()
 
-        return Response(ReservationSerializer(reservation).data, status=status.HTTP_201_CREATED)
+        return Response(ReservationSerializer(reservation, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
 
 class MesReservationsView(APIView):
@@ -44,7 +44,7 @@ class MesReservationsView(APIView):
         reservations = Reservation.objects.filter(amateur=request.user)
         liberer_les_expirees(reservations)
 
-        return Response(ReservationSerializer(reservations, many=True).data)
+        return Response(ReservationSerializer(reservations, many=True, context={'request': request}).data)
 
 
 class ReservationDetailView(APIView):
@@ -76,7 +76,7 @@ class ReservationDetailView(APIView):
         if reservation == 'interdit':
             return Response({'detail': "Accès refusé."}, status=status.HTTP_403_FORBIDDEN)
 
-        return Response(ReservationSerializer(reservation).data)
+        return Response(ReservationSerializer(reservation, context={'request': request}).data)
 
     def delete(self, request, pk):
         reservation = self.get_object(request, pk)
@@ -145,4 +145,4 @@ class GerantReservationsView(APIView):
         reservations = Reservation.objects.filter(creneau__terrain__gerant=request.user)
         liberer_les_expirees(reservations)
 
-        return Response(ReservationSerializer(reservations, many=True).data)
+        return Response(ReservationSerializer(reservations, many=True, context={'request': request}).data)
