@@ -51,9 +51,11 @@ class RegisterView(APIView):
         donnees.pop('confirmPassword')
         mot_de_passe = donnees.pop('password')
 
+        # On crée l'utilisateur avec les champs restants (prenom, nom, email).
+        #Meta.model est le modèle associé au serializer (ici, User). On crée un nouvel utilisateur avec les données validées.
         user = serializer.Meta.model(
             username=donnees['email'],  # on utilise l'email comme username interne
-            **donnees,
+            **donnees, # **donnees permet de passer les champs restants (prenom, nom, email) au constructeur du User.
         )
         user.set_password(mot_de_passe)  # hash le mot de passe, jamais en clair
         user.save()
@@ -184,9 +186,11 @@ class MeView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    # GET /api/auth/me : renvoie les infos de l'utilisateur connecté, à partir du token JWT.
     def get(self, request):
         return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
 
+    # PATCH /api/auth/me : modifie son propre profil (page "Profil").
     def patch(self, request):
         serializer = UpdateProfilSerializer(request.user, data=request.data, partial=True)
         if not serializer.is_valid():
@@ -206,6 +210,9 @@ class DevenirGerantView(APIView):
     """
 
     permission_classes = [AllowAny]
+    #Multipart est utilisé pour envoyer des fichiers (comme un document PDF ou une image) dans le corps de la requête HTTP. 
+    #FormParser est utilisé pour analyser les données de formulaire standard (application/x-www-form-urlencoded). 
+    #En combinant les deux, on peut gérer à la fois les fichiers et les champs de formulaire classiques dans la même requête.
     parser_classes = [MultiPartParser, FormParser]  # un fichier (document) est envoyé
 
     def post(self, request):
@@ -217,8 +224,9 @@ class DevenirGerantView(APIView):
         user = serializer.save()
         generer_et_envoyer_code(user)
 
+        # liste des emails de tous les admins pour notifier la nouvelle demande de gérant
         emails_admin = list(
-            User.objects.filter(role=User.Role.ADMIN).values_list('email', flat=True)
+            User.objects.filter(role=User.Role.ADMIN).values_list('email', flat=True) #flat=True permet de récupérer une liste plate des emails, plutôt qu'une liste de tuples.
         )
         demande = user.demande_gerant
         notifier_n8n('nouvelle_demande_gerant', {

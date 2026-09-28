@@ -59,11 +59,22 @@ class Reservation(models.Model):
     # pour ne jamais envoyer le même rappel deux fois.
     rappel_envoye = models.BooleanField(default=False)
 
+    # *arg et *kwargs sont utilisés pour passer des arguments supplémentaires à la méthode save() 
+    # de la classe parente (models.Model). Cela permet de conserver le comportement par défaut de la méthode save() 
+    # tout en ajoutant une logique personnalisée pour définir expire_le lors de la création d'une nouvelle réservation.
     def save(self, *args, **kwargs):
+
+        # Si c'est une nouvelle réservation (self._state.adding est True) et que expire_le n'est pas déjà défini,
+        # on le calcule comme cree_le + DELAI_EXPIRATION_MINUTES. Cela garantit que chaque nouvelle réservation a une date d'expiration correcte.
+        # _state.adding est un attribut interne de Django qui indique si l'instance du modèle est en cours de création (True) ou de mise à jour (False).
         if self._state.adding and not self.expire_le:
             self.expire_le = timezone.now() + timedelta(minutes=DELAI_EXPIRATION_MINUTES)
         super().save(*args, **kwargs)
 
+    # On calcule le reste à payer à la volée, plutôt que de le stocker en base.
+    # Cela évite d'avoir à mettre à jour ce champ si jamais le gérant change le prix du créneau après coup.
+    # @property est un décorateur qui permet de définir une méthode comme une propriété calculée. 
+    # Cela signifie que vous pouvez accéder à reste_a_payer comme s'il s'agissait d'un attribut, sans avoir besoin d'appeler une méthode.
     @property
     def reste_a_payer(self):
         return self.montant_total - self.montant_avance
@@ -71,6 +82,10 @@ class Reservation(models.Model):
     def est_expiree(self):
         return self.statut == self.Statut.EN_ATTENTE and timezone.now() > self.expire_le
 
+    # On calcule le nombre d'heures avant le match à la volée, plutôt que de le stocker en base.
+    # Cela permet de toujours avoir une valeur à jour, même si la réservation a été créée il y a longtemps.
+    # .make_aware() est utilisé pour convertir un objet datetime naïf (sans information de fuseau horaire) en un objet datetime conscient (avec information de fuseau horaire).
+    # Cela est nécessaire car Django utilise des objets datetime conscients pour gérer les dates et heures
     def heures_avant_match(self):
         """Nombre d'heures entre maintenant et le début du créneau réservé."""
         debut_match = timezone.make_aware(

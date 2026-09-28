@@ -8,6 +8,7 @@ class UserManager(BaseUserManager):
     Ici, on se base sur l'email, donc on adapte le manager.
     """
 
+    # **extra_fields permet de passer des champs supplémentaires (comme prenom, nom, role, etc.)
     def create_user(self, email, password=None, **extra_fields):
         """
         Crée et sauvegarde un utilisateur avec l'email et le mot de passe donnés.
@@ -32,6 +33,8 @@ class UserManager(BaseUserManager):
         """
         Crée et sauvegarde un superutilisateur avec l'email et le mot de passe donnés.
         """
+
+        # On définit les champs is_staff, is_superuser et is_active à True pour un superuser
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("is_active", True)

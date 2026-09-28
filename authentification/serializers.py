@@ -101,6 +101,9 @@ class VerifyEmailSerializer(serializers.Serializer):
     def validate(self, data):
         # On cherche l'utilisateur correspondant à l'email envoyé.
         try:
+            #iexact c'est un lookup de l'ORM de Django qui permet de faire une recherche insensible à la casse 
+            #sur un champ de type texte. Ici, on l'utilise pour chercher un utilisateur dont l'email correspond 
+            # exactement à celui fourni, sans tenir compte des majuscules ou minuscules.
             user = User.objects.get(email__iexact=data['email'])
         except User.DoesNotExist:
             raise serializers.ValidationError({'email': "Aucun compte avec cet email."})
@@ -112,6 +115,7 @@ class VerifyEmailSerializer(serializers.Serializer):
             raise serializers.ValidationError({'code': "Code de vérification incorrect."})
 
         # Le code n'est valable que 15 minutes après son envoi.
+        #timedelta est une classe du module datetime qui représente une durée, ici de 15 minutes.
         expire = user.code_verification_envoye_le + timedelta(minutes=15)
         if timezone.now() > expire:
             raise serializers.ValidationError({'code': "Ce code a expiré, demandez-en un nouveau."})
@@ -133,6 +137,8 @@ class ResendCodeSerializer(serializers.Serializer):
 
     def validate_email(self, value):
         try:
+            # ici on utilise get() pour récupérer un seul objet User correspondant à l'email fourni,
+            # et on utilise iexact pour que la recherche soit insensible à la casse 
             user = User.objects.get(email__iexact=value)
         except User.DoesNotExist:
             raise serializers.ValidationError("Aucun compte avec cet email.")
@@ -155,6 +161,7 @@ class LoginSerializer(TokenObtainPairSerializer):
     - le rôle et les infos utilisateur dans la réponse
     """
 
+    #attrs est un dictionnaire contenant les données validées par le serializer.
     def validate(self, attrs):
         # `super().validate()` vérifie l'email/mot de passe et prépare les
         # tokens. Si les identifiants sont mauvais, elle lève déjà une erreur.
@@ -224,8 +231,9 @@ class GoogleAuthSerializer(serializers.Serializer):
         payload = self.validated_data['credential']
         email = payload['email']
 
+        # On récupère l'utilisateur existant ou on le crée s'il n'existe pas.
         user, cree = User.objects.get_or_create(
-            email__iexact=email,
+            email__iexact=email, # Utilise iexact pour une recherche insensible à la casse
             defaults={
                 'username': email,
                 'email': email,
@@ -238,7 +246,7 @@ class GoogleAuthSerializer(serializers.Serializer):
 
         if cree:
             # Ce compte ne se connectera jamais avec un mot de passe classique.
-            user.set_unusable_password()
+            user.set_unusable_password() #set_unusable_password() est une méthode de Django qui rend le mot de passe de l'utilisateur inutilisable, empêchant toute connexion avec un mot de passe classique.
             user.save()
         elif not user.email_verifie:
             # Compte déjà existant (inscrit classiquement) mais pas encore
@@ -291,7 +299,7 @@ class DevenirGerantSerializer(serializers.ModelSerializer):
 
     def validate_email(self, value):
         """Refuse la demande si l'email est déjà utilisé par un compte vérifié."""
-        existant = User.objects.filter(email__iexact=value).first()
+        existant = User.objects.filter(email__iexact=value).first() # .fist() renvoie le premier objet correspondant à la requête, ou None si aucun n'est trouvé.
         if existant:
             if existant.email_verifie:
                 raise serializers.ValidationError("Un compte existe déjà avec cet email.")
@@ -312,7 +320,7 @@ class DevenirGerantSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         # On sépare les champs du User de ceux de la DemandeGerant.
         champs_demande = {
-            'nom_complexe': validated_data.pop('nom_complexe'),
+            'nom_complexe': validated_data.pop('nom_complexe'), #.pop() supprime la clé du dictionnaire et renvoie sa valeur. Ici, on retire les champs de DemandeGerant de validated_data pour ne garder que ceux du User.
             'quartier': validated_data.pop('quartier'),
             'adresse': validated_data.pop('adresse'),
             'whatsapp': validated_data.pop('whatsapp'),
@@ -321,11 +329,12 @@ class DevenirGerantSerializer(serializers.ModelSerializer):
         validated_data.pop('confirmPassword')
         mot_de_passe = validated_data.pop('password')
 
+        # On crée le compte gérant avec is_active=False (inactif tant qu'un admin n'a pas validé la demande).
         user = User(
             username=validated_data['email'],
             role=User.Role.GERANT,
             is_active=False,  # inactif tant que l'admin n'a pas validé
-            **validated_data,
+            **validated_data, # **validated_data permet de passer les champs restants (prenom, nom, email) au constructeur du User.
         )
         user.set_password(mot_de_passe)
         user.save()
@@ -347,6 +356,10 @@ class ChangerMotDePasseSerializer(serializers.Serializer):
 
     def validate_ancien_mot_de_passe(self, value):
         user = self.context['request'].user
+
+        # On vérifie que l'ancien mot de passe saisi correspond bien à celui de l'utilisateur connecté.
+        #check_password() est une méthode de Django qui compare un mot de passe en clair avec le mot de passe hashé stocké dans la base de données 
+        # pour l'utilisateur. Elle renvoie True si les mots de passe correspondent, sinon False.
         if not user.check_password(value):
             raise serializers.ValidationError("Mot de passe actuel incorrect.")
         return value
@@ -380,6 +393,8 @@ class ReinitialiserMotDePasseSerializer(serializers.Serializer):
     reçu par email puis définit le nouveau mot de passe.
     """
 
+    # on ne crée/modifie pas un User directement à partir des données : on doit 
+    # d'abord aller chercher l'utilisateur par son email, puis comparer le code à la main.
     email = serializers.EmailField()
     code = serializers.CharField(max_length=6)
     nouveau_mot_de_passe = serializers.CharField(write_only=True, validators=[validate_password])
@@ -400,6 +415,9 @@ class ReinitialiserMotDePasseSerializer(serializers.Serializer):
         self.user = user
         return data
 
+    # Une fois validé, on peut directement changer le mot de passe de l'utilisateur.
+    #set_password() est une méthode de Django qui prend un mot de passe en clair, le hache et le stocke dans la base de données
+    #pour l'utilisateur. Cela garantit que le mot de passe n'est jamais stocké en clair.
     def save(self):
         self.user.set_password(self.validated_data['nouveau_mot_de_passe'])
         # Le code est à usage unique : on l'efface pour qu'il ne puisse pas

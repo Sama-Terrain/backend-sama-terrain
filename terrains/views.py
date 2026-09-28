@@ -29,6 +29,7 @@ class TerrainListCreateView(APIView):
         # ?mine=true : un gérant connecté demande SES terrains (page "Mes
         # terrains"), y compris ceux qu'il a désactivés. Sinon, c'est le
         # catalogue public, qui ne montre que les terrains actifs.
+        #query_params est un dictionnaire contenant les paramètres de la requête GET (ce qui suit le ? dans l'URL). Par exemple, pour /api/terrains/?ville=Dakar&date=2026-03-15, query_params contiendra {'ville': 'Dakar', 'date': '2026-03-15'}.
         mine = request.query_params.get('mine') == 'true'
 
         if mine:
@@ -52,7 +53,7 @@ class TerrainListCreateView(APIView):
                 filtres_creneau = {'creneaux__date': date, 'creneaux__statut': Creneau.Statut.DISPONIBLE}
                 if heure:
                     filtres_creneau['creneaux__heure_debut'] = heure
-                terrains = terrains.filter(**filtres_creneau).distinct()
+                terrains = terrains.filter(**filtres_creneau).distinct() #distinct() est utilisé pour éviter les doublons dans le cas où un terrain aurait plusieurs créneaux disponibles à la même date/heure.
 
         serializer = TerrainListSerializer(
             terrains, many=True, context={'request': request, 'stats_gerant': mine}
@@ -73,6 +74,9 @@ class TerrainListCreateView(APIView):
             status=status.HTTP_201_CREATED,
         )
 
+    # le _ indique que c'est une méthode interne à la classe, pas un endpoint API. Elle est appelée depuis post() pour enregistrer les photos envoyées avec le terrain.
+    #cette méthode est utilisée pour enregistrer les photos envoyées avec la requête POST lors de la création d'un terrain. Elle récupère la liste des fichiers envoyés 
+    # sous la clé 'photos' dans la requête, puis crée une instance de TerrainPhoto pour chaque fichier, en associant chaque photo au terrain créé.
     def _enregistrer_photos(self, terrain, request):
         """Crée une TerrainPhoto pour chaque fichier envoyé sous la clé 'photos'."""
         photos = request.FILES.getlist('photos')

@@ -3,7 +3,7 @@ services:
   # Base de données PostgreSQL
   db:
     image: postgres:16-alpine
-    restart: unless-stopped
+    restart: unless-stopped # Redémarre le conteneur en cas d'arrêt non planifié
     environment:
       POSTGRES_DB: sama_terrain
       POSTGRES_USER: sama_user
@@ -15,6 +15,8 @@ services:
       # Pratique pour se connecter à la base depuis un outil externe
       # (ex: DBeaver, pgAdmin) pendant le développement.
       - "5432:5432"
+
+    # Healthcheck pour s'assurer que le conteneur PostgreSQL est prêt avant de démarrer les autres services qui en dépendent.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U sama_user -d sama_terrain"]
       interval: 5s

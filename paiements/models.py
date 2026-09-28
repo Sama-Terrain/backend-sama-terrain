@@ -46,6 +46,8 @@ class Abonnement(models.Model):
     def __str__(self):
         return f"Abonnement de {self.gerant.email} ({self.statut})"
 
+    # Méthodes utilitaires pour savoir si le gérant a encore accès à son espace
+    # @property permet de l'utiliser comme un attribut (ex: abonnement.est_actif) plutôt qu'une méthode (ex: abonnement.est_actif()).
     @property
     def est_actif(self):
         """

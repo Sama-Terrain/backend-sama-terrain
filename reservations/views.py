@@ -20,6 +20,8 @@ class ReservationCreateView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    # On ne peut pas utiliser un ModelViewSet ici, car on ne veut pas que l'amateur puisse créer une réservation pour quelqu'un d'autre (il faut que ce soit lui-même).
+    # On ne peut pas non plus utiliser un CreateAPIView, car on veut renvoyer un objet Reservation complet (avec le ticket, le terrain, etc.) plutôt qu'un simple ID.
     def post(self, request):
         serializer = ReservationCreateSerializer(data=request.data, context={'request': request})
 
@@ -40,6 +42,9 @@ class MesReservationsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    # On applique liberer_si_expiree() à toute la liste des réservations de l'amateur connecté, 
+    # pour annuler celles qui ont expiré et libérer les créneaux correspondants.
+    # Cela permet de ne pas laisser des créneaux bloqués indéfiniment si l'amateur ne finalise pas son paiement.
     def get(self, request):
         reservations = Reservation.objects.filter(amateur=request.user)
         liberer_les_expirees(reservations)
@@ -57,6 +62,9 @@ class ReservationDetailView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    # get_object est une méthode interne à la classe, pas un endpoint API. Elle est utilisée 
+    # pour récupérer une réservation spécifique par son identifiant (pk) et vérifier les permissions 
+    # de l'utilisateur connecté pour cette réservation.   
     def get_object(self, request, pk):
         reservation = Reservation.objects.filter(pk=pk).first()
         if reservation is None:
@@ -69,6 +77,11 @@ class ReservationDetailView(APIView):
 
         return liberer_si_expiree(reservation)
 
+
+    # get est un endpoint API qui permet de récupérer les détails d'une réservation spécifique. Il utilise
+    # la méthode get_object pour récupérer la réservation par son identifiant (pk) et vérifier les permissions
+    # de l'utilisateur connecté. Si la réservation est trouvée et que l'utilisateur a les droits d'accès, 
+    # elle renvoie les données de la réservation. Sinon, elle renvoie une réponse d'erreur appropriée (404 si la réservation n'existe pas, 403 si l'accès est refusé).
     def get(self, request, pk):
         reservation = self.get_object(request, pk)
         if reservation is None:
@@ -78,6 +91,10 @@ class ReservationDetailView(APIView):
 
         return Response(ReservationSerializer(reservation, context={'request': request}).data)
 
+
+    # delete est un endpoint API qui permet d'annuler une réservation spécifique. Il utilise
+    # la méthode get_object pour récupérer la réservation par son identifiant (pk) et vérifier les permissions
+    # de l'utilisateur connecté. Si la réservation est trouvée et que l'utilisateur a les droits d'accès, elle annule la réservation et libère le créneau correspondant.
     def delete(self, request, pk):
         reservation = self.get_object(request, pk)
         if reservation is None:
@@ -101,6 +118,7 @@ class ReservationDetailView(APIView):
         creneau.statut = Creneau.Statut.DISPONIBLE
         creneau.save()
 
+        # On renvoie le montant remboursé (0 si pas de remboursement) pour que le frontend puisse l'afficher à l'utilisateur.
         return Response({
             'message': "Réservation annulée.",
             'remboursement_possible': remboursement,
@@ -119,6 +137,9 @@ class PolitiqueAnnulationView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    # get est un endpoint API qui permet de vérifier si une annulation d'une réservation spécifique donnerait droit à un remboursement. Il utilise
+    # la méthode get_object pour récupérer la réservation par son identifiant (pk) et vérifier les permissions de l'utilisateur connecté. 
+    # Si la réservation est trouvée et que l'utilisateur a les droits d'accès, elle renvoie les informations sur la possibilité de remboursement. Sinon, elle renvoie une  réponse d'erreur appropriée (404 si la réservation n'existe pas, 403 si l'accès est refusé).
     def get(self, request, pk):
         reservation = Reservation.objects.filter(pk=pk, amateur=request.user).first()
         if reservation is None:
@@ -141,6 +162,8 @@ class GerantReservationsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    # On ne peut pas utiliser un ModelViewSet ici, car on ne veut pas que le gérant puisse voir les réservations d'un autre gérant.
+    # On ne peut pas non plus utiliser un ListAPIView, car on veut renvoyer un objet Reservation complet (avec le ticket, le terrain, etc.) plutôt qu'un simple ID.
     def get(self, request):
         reservations = Reservation.objects.filter(creneau__terrain__gerant=request.user)
         liberer_les_expirees(reservations)

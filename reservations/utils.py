@@ -25,6 +25,7 @@ def liberer_si_expiree(reservation):
     return reservation
 
 
+# On applique liberer_si_expiree() à toute une liste de réservations.
 def liberer_les_expirees(queryset):
     """Applique liberer_si_expiree() à toute une liste de réservations."""
     for reservation in queryset:

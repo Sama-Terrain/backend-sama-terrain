@@ -70,6 +70,9 @@ class AvisCreateSerializer(serializers.ModelSerializer):
 
         return reservation
 
+    # create est une méthode qui est appelée lors de la création d'un nouvel avis via le serializer. 
+    # Elle prend les données validées (validated_data) et crée un nouvel objet Avis en utilisant ces données, 
+    # tout en ajoutant automatiquement le terrain et l'amateur associés à la réservation.
     def create(self, validated_data):
         reservation = validated_data['reservation']
         return Avis.objects.create(

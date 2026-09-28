@@ -12,6 +12,7 @@ def recalculer_note_terrain(terrain):
     """
     stats = terrain.avis.filter(visible=True).aggregate(moyenne=Avg('note'), total=Count('id'))
 
+    # On arrondit la note moyenne à 1 chiffre après la virgule pour l'affichage.
     terrain.note_moyenne = round(stats['moyenne'] or 0, 1)
     terrain.nombre_avis = stats['total']
     terrain.save()

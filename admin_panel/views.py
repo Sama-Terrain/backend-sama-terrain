@@ -52,6 +52,7 @@ class AdminDashboardView(APIView):
 
     permission_classes = [EstAdmin]
 
+    # get est un endpoint API qui permet de récupérer les statistiques globales de la plateforme pour l'espace admin.
     def get(self, request):
         revenus_totaux = Paiement.objects.aggregate(total=Sum('montant'))['total'] or 0
 
@@ -75,17 +76,23 @@ class AdminCroissanceInscriptionsView(APIView):
 
     permission_classes = [EstAdmin]
 
+    # get est un endpoint API qui permet de récupérer le nombre de nouveaux comptes créés 
+    # chaque mois de l'année en cours pour l'espace admin. 
     def get(self, request):
         annee = timezone.now().year
         noms_mois = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc']
 
         data = []
+
+        # On parcourt les mois de l'année en cours et on compte le nombre d'utilisateurs créés pour chaque mois.
         for mois in range(1, 13):
             nombre = User.objects.filter(date_joined__year=annee, date_joined__month=mois).count()
-            data.append({'period': noms_mois[mois - 1], 'value': nombre})
+            data.append({'period': noms_mois[mois - 1], 'value': nombre}) #on ajoute le nom du mois et le nombre d'inscriptions à la liste data.
 
+        # On calcule l'évolution par rapport au mois précédent pour afficher un pourcentage d'augmentation ou de diminution.
         mois_courant = data[timezone.now().month - 1]['value']
         mois_precedent = data[timezone.now().month - 2]['value'] if timezone.now().month > 1 else 0
+
         if mois_precedent:
             evolution = round((mois_courant - mois_precedent) / mois_precedent * 100)
             total_mois = f"{'+' if evolution >= 0 else ''}{evolution}% vs mois dernier"
@@ -105,6 +112,7 @@ class AdminReservationsVilleView(APIView):
 
     permission_classes = [EstAdmin]
 
+    # get est un endpoint API qui permet de récupérer la répartition des réservations confirmées par ville (top 5) pour l'espace admin.
     def get(self, request):
         villes = (
             Reservation.objects.filter(statut=Reservation.Statut.CONFIRMEE)
@@ -113,6 +121,9 @@ class AdminReservationsVilleView(APIView):
             .order_by('-total')[:5]
         )
 
+        # On renvoie la liste des villes avec le nombre de réservations confirmées et une couleur associée pour le graphique.
+        #enumerate() est utilisé pour obtenir l'index de chaque ville dans la liste, afin d'assigner 
+        # une couleur différente à chaque ville en utilisant la liste COULEURS_VILLES.
         return Response([
             {
                 'ville': v['creneau__terrain__ville'],
@@ -320,13 +331,19 @@ class UtilisateursListView(APIView):
 
     permission_classes = [EstAdmin]
 
+    # get est un endpoint API qui permet de récupérer la liste de tous les comptes de la plateforme 
+    # (amateurs, gérants, admins) pour l'espace admin.
     def get(self, request):
         utilisateurs = []
 
+        # On parcourt tous les utilisateurs de la base de données, triés par date d'inscription décroissante.
         for user in User.objects.all().order_by('-date_joined'):
             # Le téléphone/quartier ne sont enregistrés que pour les gérants
             # (via leur demande d'inscription) : rien de tel n'existe pour
             # un compte amateur, créé sans ces informations.
+            #getattr() est utilisé pour récupérer l'attribut 'demande_gerant' de l'utilisateur,
+            # s'il existe, sinon None. Cela permet d'éviter une erreur si l'utilisateur n'a pas 
+            # de demande de gérant associée (par exemple, s'il est un amateur ou un admin).
             demande = getattr(user, 'demande_gerant', None)
 
             utilisateurs.append({
@@ -354,17 +371,22 @@ class ToggleActifUtilisateurView(APIView):
 
     permission_classes = [EstAdmin]
 
+    # patch est un endpoint API qui permet d'activer ou de suspendre un compte utilisateur (bascule is_active) pour l'espace admin.
     def patch(self, request, pk):
         utilisateur = User.objects.filter(pk=pk).first()
         if utilisateur is None:
             return Response({'detail': "Utilisateur introuvable."}, status=status.HTTP_404_NOT_FOUND)
 
+        # On vérifie que l'utilisateur connecté n'essaie pas de suspendre son propre compte,
+        # pour éviter de se retrouver bloqué hors de l'espace admin.
         if utilisateur.id == request.user.id:
             return Response(
                 {'detail': "Vous ne pouvez pas suspendre votre propre compte."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # On bascule l'état actif du compte utilisateur (is_active) et on enregistre les 
+        # modifications dans la base de données.
         utilisateur.is_active = not utilisateur.is_active
         utilisateur.save()
 
@@ -384,6 +406,7 @@ class SupprimerUtilisateurView(APIView):
 
     permission_classes = [EstAdmin]
 
+    # delete est un endpoint API qui permet de supprimer définitivement un compte utilisateur pour l'espace admin.
     def delete(self, request, pk):
         utilisateur = User.objects.filter(pk=pk).first()
         if utilisateur is None:
@@ -417,11 +440,16 @@ class AdminGerantDetailView(APIView):
 
     permission_classes = [EstAdmin]
 
+    # get est un endpoint API qui permet de récupérer les détails d'un gérant précis pour l'espace admin,
+    # y compris ses terrains, son abonnement, ses revenus et l'historique de ses paiements. 
+    # Il répond aux questions "combien gagne ce gérant ?", "où en est son abonnement ?", posées à la 
+    # page "Gestion des utilisateurs" (bouton "Voir").
     def get(self, request, user_id):
         gerant = User.objects.filter(pk=user_id, role=User.Role.GERANT).first()
         if gerant is None:
             return Response({'detail': "Gérant introuvable."}, status=status.HTTP_404_NOT_FOUND)
 
+        # On récupère tous les terrains appartenant au gérant et on prépare les données pour l'affichage dans l'espace admin.
         terrains = Terrain.objects.filter(gerant=gerant)
         terrains_data = [
             {
@@ -436,10 +464,15 @@ class AdminGerantDetailView(APIView):
             for t in terrains
         ]
 
+        # On récupère tous les paiements liés au gérant, soit par ses terrains, soit par son abonnement, et on les trie par date décroissante.
+        # Q est utilisé pour combiner les deux conditions de filtrage avec un "OU" logique.
+        # Q est une classe de Django qui permet de construire des requêtes complexes avec des conditions "OU" et "ET".
         paiements = Paiement.objects.filter(
             Q(reservation__creneau__terrain__gerant=gerant) | Q(abonnement__gerant=gerant)
         ).order_by('-cree_le')
 
+        # On calcule les revenus totaux et les revenus du mois en cours pour le gérant, en filtrant 
+        # les paiements de type "avance" ou "solde" (ceux qui représentent de l'argent reçu par le gérant).
         revenus_terrains = paiements.filter(
             type__in=[Paiement.Type.AVANCE, Paiement.Type.SOLDE]
         )
@@ -449,6 +482,8 @@ class AdminGerantDetailView(APIView):
             cree_le__date__gte=debut_mois
         ).aggregate(total=Sum('montant'))['total'] or 0
 
+
+        # On récupère l'abonnement du gérant (s'il existe) et on prépare les données pour l'affichage dans l'espace admin.
         abonnement = Abonnement.objects.filter(gerant=gerant).first()
         abonnement_data = None
         if abonnement:
@@ -459,6 +494,8 @@ class AdminGerantDetailView(APIView):
                 'est_actif': abonnement.est_actif,
             }
 
+        # On prépare les paiements reçus et les paiements d'abonnement pour l'affichage dans 
+        # l'espace admin, en sérialisant chaque paiement avec ses informations pertinentes.
         def serialiser_paiement(p):
             return {
                 'id': p.id,
@@ -480,6 +517,9 @@ class AdminGerantDetailView(APIView):
             if p.type == Paiement.Type.ABONNEMENT
         ][:20]
 
+
+        # On renvoie toutes les données préparées pour l'affichage dans l'espace admin,
+        # y compris les informations du gérant, ses terrains, ses revenus, son abonnement et l'historique de ses paiements.
         return Response({
             'gerant': {
                 'id': gerant.id,
@@ -506,10 +546,14 @@ class GerantsListView(APIView):
 
     permission_classes = [EstAdmin]
 
+    # get est un endpoint API qui permet de récupérer la liste des demandes de gérant pour l'espace admin,
+    # avec un filtre optionnel par statut (en_attente / validee / rejetee). Sans filtre, il renvoie toutes les demandes.
     def get(self, request):
         demandes = DemandeGerant.objects.all().order_by('-cree_le')
 
         statut = request.query_params.get('statut')
+
+        # Si un statut est fourni dans les paramètres de requête, on filtre les demandes de gérant en fonction de ce statut.
         if statut:
             demandes = demandes.filter(statut=statut)
 
@@ -531,6 +575,8 @@ class ValiderGerantView(APIView):
         if demande is None:
             return Response({'detail': "Demande introuvable."}, status=status.HTTP_404_NOT_FOUND)
 
+        # On valide la demande de gérant en mettant à jour son statut et la date de traitement, 
+        # puis on active le compte utilisateur associé.
         demande.statut = DemandeGerant.Statut.VALIDEE
         demande.traitee_le = timezone.now()
         demande.save()
@@ -538,6 +584,7 @@ class ValiderGerantView(APIView):
         demande.user.is_active = True
         demande.user.save()
 
+        # On crée ou récupère l'abonnement du gérant et on le configure pour une période d'essai gratuit de 7 jours.
         abonnement, _ = Abonnement.objects.get_or_create(gerant=demande.user)
         abonnement.statut = Abonnement.Statut.ESSAI
         abonnement.date_fin_essai = timezone.now() + timedelta(days=DUREE_ESSAI_JOURS)
@@ -571,6 +618,9 @@ class RejeterGerantView(APIView):
         if demande is None:
             return Response({'detail': "Demande introuvable."}, status=status.HTTP_404_NOT_FOUND)
 
+        # On récupère le motif de rejet depuis les données de la requête et on vérifie qu'il est fourni.
+        # Le motif est obligatoire pour informer la personne du rejet de sa demande.
+        # On utilise .strip() pour enlever les espaces avant et après le motif, afin d'éviter un motif vide.
         motif = request.data.get('motif', '').strip()
         if not motif:
             return Response(
@@ -578,6 +628,8 @@ class RejeterGerantView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # On rejette la demande de gérant en mettant à jour son statut et la date de traitement, 
+        # puis on envoie une notification par email à la personne concernée.
         user = demande.user
         notifier_n8n('demande_gerant_rejetee', {
             'email_gerant': user.email,
@@ -602,6 +654,8 @@ class AdminAvisListView(APIView):
 
     permission_classes = [EstAdmin]
 
+    # get est un endpoint API qui permet de récupérer la liste des avis pour l'espace admin, 
+    # avec un filtre optionnel par signalement (signale=true).
     def get(self, request):
         avis = Avis.objects.all().order_by('-cree_le')
 
@@ -620,6 +674,9 @@ class MasquerAvisView(APIView):
 
     permission_classes = [EstAdmin]
 
+    # patch est un endpoint API qui permet de masquer un avis signalé pour l'espace admin,
+    # afin qu'il n'apparaisse plus publiquement. Il met à jour l'attribut "visible" de l'avis à 
+    # False et recalcul la note moyenne du terrain associé.
     def patch(self, request, pk):
         avis = Avis.objects.filter(pk=pk).first()
         if avis is None:
@@ -641,6 +698,9 @@ class ValiderAvisView(APIView):
 
     permission_classes = [EstAdmin]
 
+    # patch est un endpoint API qui permet de conserver un avis signalé pour l'espace admin,
+    # en rejetant le signalement et en laissant l'avis visible. Il met à jour l'attribut "signale" 
+    # de l'avis à False et recalcul la note moyenne du terrain associé.
     def patch(self, request, pk):
         avis = Avis.objects.filter(pk=pk).first()
         if avis is None:

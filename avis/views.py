@@ -21,6 +21,8 @@ class MeilleursAvisView(APIView):
 
     permission_classes = [AllowAny]
 
+    # get est un endpoint API qui permet de récupérer les meilleurs avis visibles et 
+    # commentés pour les afficher sur la page d'accueil.
     def get(self, request):
         avis = (
             Avis.objects.filter(visible=True, note__gte=4)
@@ -40,6 +42,8 @@ class TerrainAvisListView(APIView):
 
     permission_classes = [AllowAny]
 
+    # get est un endpoint API qui permet de récupérer la liste des avis visibles pour un terrain spécifique.
+    # Il prend l'identifiant du terrain (terrain_id) en paramètre et renvoie les avis associés à ce terrain, triés par date de création décroissante.
     def get(self, request, terrain_id):
         terrain = Terrain.objects.filter(pk=terrain_id).first()
         if terrain is None:
@@ -59,6 +63,9 @@ class AvisPossibleView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    # get est un endpoint API qui permet de vérifier si l'amateur connecté peut laisser un avis sur une réservation spécifique.
+    # Il prend l'identifiant de la réservation (pk) en paramètre et renvoie un objet JSON indiquant si l'avis est possible et 
+    # si l'utilisateur a déjà laissé un avis pour cette réservation.
     def get(self, request, pk):
         reservation = Reservation.objects.filter(pk=pk, amateur=request.user).first()
         if reservation is None:

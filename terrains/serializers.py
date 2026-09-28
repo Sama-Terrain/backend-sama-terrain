@@ -20,7 +20,7 @@ class TerrainListSerializer(serializers.ModelSerializer):
     On ne renvoie pas tous les détails ici, juste ce qu'il faut pour
     afficher une carte de terrain dans le catalogue.
     """
-
+    #serializers.SerializerMethodField() est utilisé pour définir un champ personnalisé dans le serializer.
     # La première photo du terrain, utilisée comme image de la carte.
     image = serializers.SerializerMethodField()
 
@@ -58,7 +58,7 @@ class TerrainListSerializer(serializers.ModelSerializer):
         return Reservation.objects.filter(
             creneau__terrain=terrain,
             statut=Reservation.Statut.CONFIRMEE,
-            creneau__date__gte=debut_mois,
+            creneau__date__gte=debut_mois, #gte signifie "greater than or equal to" (supérieur ou égal à). On ne compte que les réservations confirmées pour le mois en cours.
         ).count()
 
     def get_revenus_mois(self, terrain):
@@ -68,7 +68,7 @@ class TerrainListSerializer(serializers.ModelSerializer):
         total = Paiement.objects.filter(
             reservation__creneau__terrain=terrain,
             cree_le__date__gte=debut_mois,
-        ).aggregate(total=Sum('montant'))['total']
+        ).aggregate(total=Sum('montant'))['total'] #aggregate permet de calculer des valeurs agrégées (comme la somme, la moyenne, le maximum, etc.) sur un queryset. Ici, on calcule la somme des montants des paiements pour le terrain donné depuis le début du mois.
         return total or 0
 
     def get_taux_occupation(self, terrain):
@@ -90,8 +90,12 @@ class TerrainDetailSerializer(TerrainListSerializer):
     horaires, la liste complète des photos, etc.
     """
 
-    photos = TerrainPhotoSerializer(many=True, read_only=True)
+    photos = TerrainPhotoSerializer(many=True, read_only=True) #many=True indique que le champ photos est une liste de plusieurs objets TerrainPhoto, et read_only=True signifie que ce champ ne peut pas être modifié via ce serializer (il est uniquement utilisé pour la lecture des données).
 
+    # On hérite de TerrainListSerializer pour ne pas dupliquer le code des champs communs 
+    # (nom, ville, adresse, type, surface, prix_heure, avance, note_moyenne, nombre_avis, 
+    # actif, equipements, description, image, heure_ouverture, heure_fermeture, reservations_mois, revenus_mois, taux_occupation).
+    # et on ajoute les champs spécifiques à la page détail (capacite, photos, gerant).
     class Meta(TerrainListSerializer.Meta):
         fields = TerrainListSerializer.Meta.fields + [
             'capacite', 'photos', 'gerant',
@@ -116,3 +120,4 @@ class TerrainCreateUpdateSerializer(serializers.ModelSerializer):
         # NB : "actif" n'est pas modifiable ici volontairement (pas de route
         # prévue pour ça dans la spec). Un nouveau terrain est actif par
         # défaut (voir Terrain.actif dans models.py).
+

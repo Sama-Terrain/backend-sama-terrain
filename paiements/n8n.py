@@ -17,6 +17,7 @@ def notifier_n8n(evenement, donnees):
         return
 
     try:
+        # On envoie un POST à l'URL du webhook N8n, avec un JSON contenant l'évènement et les données associées.
         requests.post(
             settings.N8N_WEBHOOK_URL,
             json={'evenement': evenement, **donnees},
