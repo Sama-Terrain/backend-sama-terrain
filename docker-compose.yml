@@ -67,13 +67,13 @@ services:
   # Micro-service IA (FastAPI), séparé de Django (voir dossier IA/) :
   # analyse de la demande / prix recommandés, et chatbot d'assistance.
   ia:
-    build:
-     context: ../IA
+    build: 
+     context: ../ia-sama-terrain
      dockerfile: Dockerfile
 
     restart: unless-stopped
     env_file:
-      - ../IA/.env
+      - ../ia-sama-terrain/.env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       # Le téléchargement "xet" (rapide) de HuggingFace échoue parfois selon
