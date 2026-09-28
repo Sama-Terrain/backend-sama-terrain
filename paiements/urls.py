@@ -4,6 +4,7 @@ from .views import (
     AbonnementInitierView,
     AbonnementIPNView,
     AlertesExpirationAbonnementView,
+    InitierPaiementGroupeView,
     InitierPaiementView,
     PaiementIPNView,
     RappelsReservationsView,
@@ -12,6 +13,7 @@ from .views import (
 
 urlpatterns = [
     path('initier/', InitierPaiementView.as_view(), name='paiement-initier'),
+    path('initier-groupe/', InitierPaiementGroupeView.as_view(), name='paiement-initier-groupe'),
     path('ipn/', PaiementIPNView.as_view(), name='paiement-ipn'),
     path('abonnement/initier/', AbonnementInitierView.as_view(), name='abonnement-initier'),
     path('abonnement/ipn/', AbonnementIPNView.as_view(), name='abonnement-ipn'),

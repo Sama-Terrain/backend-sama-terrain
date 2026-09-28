@@ -10,13 +10,13 @@ from rest_framework.views import APIView
 
 from authentification.models import User
 from creneaux.models import Creneau
-from reservations.models import Reservation
+from reservations.models import Commande, Reservation
 from tickets.models import Ticket
 
 from .models import PRIX_ABONNEMENT_MENSUEL, Abonnement, Paiement
 from .n8n import notifier_n8n
 from .paytech import creer_demande_paiement
-from .serializers import InitierPaiementSerializer, SoldeSerializer
+from .serializers import InitierPaiementGroupeSerializer, InitierPaiementSerializer, SoldeSerializer
 
 
 class InitierPaiementView(APIView):
@@ -85,6 +85,98 @@ class InitierPaiementView(APIView):
         return Response({'payment_url': payment_url}, status=status.HTTP_200_OK)
 
 
+class InitierPaiementGroupeView(APIView):
+    """
+    POST /api/paiements/initier-groupe/
+
+    Comme InitierPaiementView, mais pour une Commande regroupant plusieurs
+    réservations (plusieurs créneaux payés en une seule fois) : un seul
+    paiement PayTech pour la somme des avances de chaque réservation.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = InitierPaiementGroupeSerializer(data=request.data, context={'request': request})
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        commande = serializer.validated_data['commande']
+        moyen_paiement = serializer.validated_data['moyen_paiement']
+        reservations = list(commande.reservations.filter(statut=Reservation.Statut.EN_ATTENTE))
+
+        avance_totale = sum(r.montant_avance for r in reservations)
+        # Toutes les réservations d'une commande partagent le même terrain
+        # (imposé à la création, voir ReservationGroupeCreateSerializer).
+        terrain = reservations[0].creneau.terrain
+        premiere_reservation = reservations[0]
+
+        ref_command = f"GRP-{commande.id}-{int(timezone.now().timestamp())}"
+
+        resultat = creer_demande_paiement(
+            item_name=f"Réservation {terrain.nom} ({len(reservations)} créneau(x))",
+            item_price=avance_totale,
+            ref_command=ref_command,
+            ipn_url=f"{settings.BACKEND_URL}/api/paiements/ipn/",
+            success_url=f"{settings.FRONTEND_URL}/paiement/succes?commande={commande.id}",
+            cancel_url=f"{settings.FRONTEND_URL}/paiement/annule?commande={commande.id}",
+            target_payment=moyen_paiement,
+        )
+
+        telephone_national = premiere_reservation.telephone.removeprefix('221')
+        parametres_prefill = urlencode({
+            'pn': f"+{premiere_reservation.telephone}",
+            'nn': telephone_national,
+            'fn': f"{premiere_reservation.amateur.prenom} {premiere_reservation.amateur.nom}",
+            'tp': moyen_paiement,
+            'nac': '1',
+        })
+        separateur = '&' if '?' in resultat['payment_url'] else '?'
+        payment_url = f"{resultat['payment_url']}{separateur}{parametres_prefill}"
+
+        return Response({'payment_url': payment_url}, status=status.HTTP_200_OK)
+
+
+def _confirmer_reservation(reservation, moyen_paiement, transaction_id):
+    """
+    Marque UNE réservation comme payée : confirme la réservation et son
+    créneau, enregistre le Paiement, génère le ticket QR et notifie N8n.
+    Partagé entre le paiement d'une réservation seule et celui d'une
+    commande groupée (voir PaiementIPNView), pour ne pas dupliquer cette
+    logique entre les deux cas.
+    """
+    reservation.statut = Reservation.Statut.CONFIRMEE
+    reservation.moyen_paiement = moyen_paiement
+    reservation.transaction_id = transaction_id
+    reservation.save()
+
+    creneau = reservation.creneau
+    creneau.statut = Creneau.Statut.CONFIRME
+    creneau.save()
+
+    Paiement.objects.create(
+        type=Paiement.Type.AVANCE,
+        reservation=reservation,
+        montant=reservation.montant_avance,
+        moyen_paiement=reservation.moyen_paiement,
+        transaction_id=reservation.transaction_id,
+    )
+
+    # Un ticket par réservation confirmée. get_or_create évite un doublon
+    # si PayTech renvoie la même notification IPN deux fois.
+    ticket, _ = Ticket.objects.get_or_create(reservation=reservation)
+
+    notifier_n8n('reservation_confirmee', {
+        'email_amateur': reservation.amateur.email,
+        'nom_amateur': reservation.amateur.prenom,
+        'telephone_amateur': reservation.telephone,
+        'terrain': creneau.terrain.nom,
+        'date': str(creneau.date),
+        'heure': str(creneau.heure_debut),
+        'code_ticket': str(ticket.code),
+    })
+
+
 class PaiementIPNView(APIView):
     """
     POST /api/paiements/ipn/
@@ -99,56 +191,34 @@ class PaiementIPNView(APIView):
 
     def post(self, request):
         # PayTech renvoie le ref_command qu'on avait fourni à la création :
-        # il a la forme "RES-<id_reservation>-<timestamp>".
+        # "RES-<id_reservation>-<timestamp>" pour une réservation seule, ou
+        # "GRP-<id_commande>-<timestamp>" pour plusieurs créneaux payés
+        # ensemble (voir InitierPaiementGroupeView).
         ref_command = request.data.get('ref_command', '')
+        moyen_paiement = request.data.get('payment_method', '')
+        transaction_id = request.data.get('token', '')
 
-        # On récupère l'id de la réservation depuis le ref_command, pour savoir quelle réservation mettre à jour.
-        # .split permet de diviser une chaîne en plusieurs parties selon un séparateur (ici '-'), et [1] récupère la deuxième partie (l'id de la réservation).
         try:
-            reservation_id = int(ref_command.split('-')[1])
+            prefixe, identifiant = ref_command.split('-')[0], int(ref_command.split('-')[1])
         except (IndexError, ValueError):
             return Response({'detail': "ref_command invalide."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # On récupère la réservation correspondante depuis la base de données. Si elle n'existe pas, on renvoie une erreur 404.
-        reservation = Reservation.objects.filter(pk=reservation_id).first()
+        if prefixe == 'GRP':
+            commande = Commande.objects.filter(pk=identifiant).first()
+            if commande is None:
+                return Response({'detail': "Commande introuvable."}, status=status.HTTP_404_NOT_FOUND)
 
-        if reservation is None:
-            return Response({'detail': "Réservation introuvable."}, status=status.HTTP_404_NOT_FOUND)
+            # On ne confirme que les réservations encore en attente : si PayTech
+            # renvoie la même notification IPN deux fois, on ne refait pas le
+            # travail (déjà fait) pour celles déjà confirmées.
+            for reservation in commande.reservations.filter(statut=Reservation.Statut.EN_ATTENTE):
+                _confirmer_reservation(reservation, moyen_paiement, transaction_id)
+        else:
+            reservation = Reservation.objects.filter(pk=identifiant).first()
+            if reservation is None:
+                return Response({'detail': "Réservation introuvable."}, status=status.HTTP_404_NOT_FOUND)
 
-        # On met à jour la réservation et le créneau pour indiquer que le paiement a été confirmé.
-        reservation.statut = Reservation.Statut.CONFIRMEE
-        reservation.moyen_paiement = request.data.get('payment_method', '')
-        reservation.transaction_id = request.data.get('token', '')
-        reservation.save()
-
-        # On met à jour le créneau pour indiquer qu'il est confirmé et plus disponible.
-        creneau = reservation.creneau
-        creneau.statut = Creneau.Statut.CONFIRME
-        creneau.save()
-
-        # On crée un enregistrement de paiement pour cette réservation, avec le type "avance", 
-        # le montant payé, le moyen de paiement et l'identifiant de transaction fournis par PayTech.
-        Paiement.objects.create(
-            type=Paiement.Type.AVANCE,
-            reservation=reservation,
-            montant=reservation.montant_avance,
-            moyen_paiement=reservation.moyen_paiement,
-            transaction_id=reservation.transaction_id,
-        )
-
-        # Un ticket par réservation confirmée. get_or_create évite un doublon
-        # si PayTech renvoie la même notification IPN deux fois.
-        ticket, _ = Ticket.objects.get_or_create(reservation=reservation)
-
-        notifier_n8n('reservation_confirmee', {
-            'email_amateur': reservation.amateur.email,
-            'nom_amateur': reservation.amateur.prenom,
-            'telephone_amateur': reservation.telephone,
-            'terrain': creneau.terrain.nom,
-            'date': str(creneau.date),
-            'heure': str(creneau.heure_debut),
-            'code_ticket': str(ticket.code),
-        })
+            _confirmer_reservation(reservation, moyen_paiement, transaction_id)
 
         return Response({'message': "Paiement confirmé."}, status=status.HTTP_200_OK)
 

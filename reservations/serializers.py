@@ -3,7 +3,7 @@ from rest_framework import serializers
 
 from creneaux.models import Creneau
 
-from .models import Reservation
+from .models import Commande, Reservation
 
 
 class ReservationSerializer(serializers.ModelSerializer):
@@ -122,3 +122,87 @@ class ReservationCreateSerializer(serializers.ModelSerializer):
         creneau.save()
 
         return reservation
+
+
+class ReservationGroupeCreateSerializer(serializers.Serializer):
+    """
+    Utilisé pour POST /api/reservations/groupe/.
+
+    Permet de réserver plusieurs créneaux d'UN MÊME terrain en une seule
+    fois (ex: 18h ET 19h le même jour), avec une seule avance globale
+    répartie au prorata du prix de chaque créneau. Crée une Commande qui
+    regroupe les Reservation créées, pour un paiement PayTech unique.
+    """
+
+    creneaux = serializers.PrimaryKeyRelatedField(
+        queryset=Creneau.objects.all(), many=True, allow_empty=False,
+    )
+    nom_complet = serializers.CharField(max_length=150)
+    telephone = serializers.CharField(max_length=20)
+    montant_avance = serializers.IntegerField()
+
+    def validate_creneaux(self, creneaux):
+        if len(creneaux) != len(set(c.id for c in creneaux)):
+            raise serializers.ValidationError("Un même créneau ne peut pas être sélectionné deux fois.")
+
+        if len({c.terrain_id for c in creneaux}) > 1:
+            raise serializers.ValidationError("Tous les créneaux doivent appartenir au même terrain.")
+
+        maintenant = timezone.now()
+        for creneau in creneaux:
+            if creneau.statut != Creneau.Statut.DISPONIBLE:
+                raise serializers.ValidationError(f"Le créneau {creneau} n'est plus disponible.")
+            debut = timezone.make_aware(timezone.datetime.combine(creneau.date, creneau.heure_debut))
+            if debut <= maintenant:
+                raise serializers.ValidationError(f"Le créneau {creneau} est déjà passé.")
+
+        return creneaux
+
+    def validate_montant_avance(self, montant):
+        if montant <= MONTANT_AVANCE_MINIMUM:
+            raise serializers.ValidationError(
+                f"L'avance doit être strictement supérieure à {MONTANT_AVANCE_MINIMUM:,} FCFA.".replace(',', ' ')
+            )
+        return montant
+
+    def validate(self, data):
+        prix_total = sum(c.prix for c in data['creneaux'])
+        if data['montant_avance'] >= prix_total:
+            raise serializers.ValidationError(
+                {'montant_avance': "L'avance ne peut pas être supérieure ou égale au prix total des créneaux choisis."}
+            )
+        return data
+
+    def create(self, validated_data):
+        creneaux = validated_data['creneaux']
+        prix_total = sum(c.prix for c in creneaux)
+        avance_totale = validated_data['montant_avance']
+
+        commande = Commande.objects.create(amateur=self.context['request'].user)
+
+        # Répartition de l'avance au prorata du prix de chaque créneau, en
+        # ajustant le dernier créneau pour que la somme retombe exactement
+        # sur le montant saisi (les arrondis peuvent perdre 1 ou 2 FCFA).
+        reservations = []
+        avance_distribuee = 0
+        for index, creneau in enumerate(creneaux):
+            if index == len(creneaux) - 1:
+                avance_creneau = avance_totale - avance_distribuee
+            else:
+                avance_creneau = round(avance_totale * creneau.prix / prix_total)
+                avance_distribuee += avance_creneau
+
+            reservation = Reservation.objects.create(
+                amateur=self.context['request'].user,
+                groupe=commande,
+                creneau=creneau,
+                nom_complet=validated_data['nom_complet'],
+                telephone=validated_data['telephone'],
+                montant_avance=avance_creneau,
+                montant_total=creneau.prix,
+            )
+            creneau.statut = Creneau.Statut.EN_ATTENTE
+            creneau.save()
+            reservations.append(reservation)
+
+        return commande, reservations
