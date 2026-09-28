@@ -14,6 +14,28 @@ DELAI_EXPIRATION_MINUTES = 15
 DELAI_REMBOURSEMENT_HEURES = 24
 
 
+class Commande(models.Model):
+    """
+    Regroupe plusieurs réservations (créneaux) faites et payées en une
+    seule fois par un amateur (ex: réserver 18h ET 19h le même jour).
+
+    Volontairement minimal : chaque Reservation garde son propre statut,
+    son propre montant et sa propre expiration (voir Reservation.save()) —
+    la Commande ne sert qu'à les regrouper pour un paiement PayTech unique.
+    Une réservation "seule" est simplement une Commande à une seule ligne.
+    """
+
+    amateur = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='commandes',
+    )
+    cree_le = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Commande {self.id} - {self.amateur.email} ({self.reservations.count()} créneau(x))"
+
+
 class Reservation(models.Model):
     """Une réservation d'un créneau par un amateur."""
 
@@ -27,6 +49,16 @@ class Reservation(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='reservations',
+    )
+
+    # La commande qui a créé (et payé) cette réservation. Nullable pour ne
+    # rien casser : une réservation peut exister seule, sans commande.
+    groupe = models.ForeignKey(
+        Commande,
+        on_delete=models.CASCADE,
+        related_name='reservations',
+        null=True,
+        blank=True,
     )
 
     # Le créneau réservé. Volontairement pas un OneToOne : si une réservation

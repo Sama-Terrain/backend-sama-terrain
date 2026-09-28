@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from reservations.models import Reservation
+from reservations.models import Commande, Reservation
 
 
 class InitierPaiementSerializer(serializers.Serializer):
@@ -21,6 +21,25 @@ class InitierPaiementSerializer(serializers.Serializer):
         if reservation.statut != Reservation.Statut.EN_ATTENTE:
             raise serializers.ValidationError("Cette réservation n'attend pas de paiement.")
         return reservation
+
+
+class InitierPaiementGroupeSerializer(serializers.Serializer):
+    """
+    Vérifie qu'une commande (plusieurs créneaux réservés ensemble) existe,
+    appartient bien à l'amateur, et a au moins une réservation qui attend
+    encore un paiement.
+    """
+
+    commande = serializers.PrimaryKeyRelatedField(queryset=Commande.objects.all())
+    moyen_paiement = serializers.ChoiceField(choices=['Wave', 'Orange Money'])
+
+    def validate_commande(self, commande):
+        request = self.context['request']
+        if commande.amateur_id != request.user.id:
+            raise serializers.ValidationError("Cette commande ne vous appartient pas.")
+        if not commande.reservations.filter(statut=Reservation.Statut.EN_ATTENTE).exists():
+            raise serializers.ValidationError("Cette commande n'attend pas de paiement.")
+        return commande
 
 
 class SoldeSerializer(serializers.Serializer):

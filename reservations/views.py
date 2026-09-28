@@ -5,8 +5,8 @@ from rest_framework.views import APIView
 
 from creneaux.models import Creneau
 
-from .models import Reservation
-from .serializers import ReservationCreateSerializer, ReservationSerializer
+from .models import Commande, Reservation
+from .serializers import ReservationCreateSerializer, ReservationGroupeCreateSerializer, ReservationSerializer
 from .utils import liberer_les_expirees, liberer_si_expiree
 
 
@@ -31,6 +31,58 @@ class ReservationCreateView(APIView):
         reservation = serializer.save()
 
         return Response(ReservationSerializer(reservation, context={'request': request}).data, status=status.HTTP_201_CREATED)
+
+
+class ReservationGroupeCreateView(APIView):
+    """
+    POST /api/reservations/groupe/
+
+    Crée plusieurs réservations d'un coup (un même terrain, plusieurs
+    créneaux) regroupées dans une Commande, pour un paiement PayTech
+    unique de l'avance totale (voir InitierPaiementGroupeView).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ReservationGroupeCreateSerializer(data=request.data, context={'request': request})
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        commande, reservations = serializer.save()
+
+        return Response(
+            {
+                'commande': commande.id,
+                'reservations': ReservationSerializer(reservations, many=True, context={'request': request}).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class CommandeDetailView(APIView):
+    """
+    GET /api/reservations/commande/:id/
+
+    Détail d'une commande (ses réservations), utilisé par la page de
+    paiement pour afficher le récapitulatif et par la page de succès pour
+    vérifier que TOUTES les réservations du groupe ont bien été confirmées.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        commande = Commande.objects.filter(pk=pk, amateur=request.user).first()
+        if commande is None:
+            return Response({'detail': "Commande introuvable."}, status=status.HTTP_404_NOT_FOUND)
+
+        reservations = liberer_les_expirees(commande.reservations.all())
+
+        return Response({
+            'commande': commande.id,
+            'reservations': ReservationSerializer(reservations, many=True, context={'request': request}).data,
+        })
 
 
 class MesReservationsView(APIView):
