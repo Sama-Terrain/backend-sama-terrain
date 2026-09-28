@@ -121,15 +121,16 @@ class TerrainCreateUpdateSerializer(serializers.ModelSerializer):
         # prévue pour ça dans la spec). Un nouveau terrain est actif par
         # défaut (voir Terrain.actif dans models.py).
 
-    # Fourchette de capacité plausible pour chaque type de terrain, déduite
-    # directement du format annoncé par le type ("Foot à 5" = 5 joueurs par
-    # équipe, donc 10 sur le terrain, plus quelques remplaçants). Même règle
-    # appliquée côté frontend (voir AjouterTerrain.jsx).
+    # Capacité exacte (nombre de joueurs sur le terrain) attendue pour chaque
+    # type, déduite directement du format annoncé par le type : un terrain
+    # "Foot à 7" se joue à 7 contre 7, donc 14 joueurs maximum sur le
+    # terrain — pas plus. Même règle appliquée côté frontend (voir
+    # AjouterTerrain.jsx).
     CAPACITE_PAR_TYPE = {
-        'Foot à 5': (10, 14),
-        'Foot à 6': (12, 16),
-        'Foot à 7': (14, 18),
-        'Foot à 11': (22, 30),
+        'Foot à 5': 10,
+        'Foot à 6': 12,
+        'Foot à 7': 14,
+        'Foot à 11': 22,
     }
 
     def validate_nom(self, value):
@@ -155,12 +156,12 @@ class TerrainCreateUpdateSerializer(serializers.ModelSerializer):
         capacite = data.get('capacite', getattr(self.instance, 'capacite', None))
 
         if type_terrain and capacite is not None:
-            bornes = self.CAPACITE_PAR_TYPE.get(type_terrain)
-            if bornes and not (bornes[0] <= capacite <= bornes[1]):
+            capacite_max = self.CAPACITE_PAR_TYPE.get(type_terrain)
+            if capacite_max and capacite > capacite_max:
                 raise serializers.ValidationError({
                     'capacite': (
                         f"La capacité renseignée n'est pas compatible avec le type "
-                        f"\"{type_terrain}\" (attendu : entre {bornes[0]} et {bornes[1]} joueurs)."
+                        f"\"{type_terrain}\" (maximum {capacite_max} joueurs)."
                     )
                 })
 
