@@ -10,10 +10,14 @@ class EstGerantProprietaireDuTerrain(BasePermission):
     est en cours (essai ou payé non expiré).
     """
 
+    # has_permission est appelé avant la création d'un objet Creneau (POST /api/creneaux/), pour vérifier que l'utilisateur connecté est bien un gérant et que son abonnement est actif.
     def has_permission(self, request, view):
+        # on vérifie que l'utilisateur est bien un gérant et que son abonnement est actif. 
+        # Cela permet de s'assurer que seuls les gérants ayant un abonnement valide peuvent créer des créneaux pour leurs terrains.
         if not bool(request.user and request.user.is_authenticated and request.user.role == 'gerant'):
             return False
 
+        # on vérifie que l'abonnement du gérant est actif. Si l'abonnement n'existe pas encore, il sera créé automatiquement avec get_or_create.
         abonnement, _ = Abonnement.objects.get_or_create(gerant=request.user)
         return abonnement.est_actif
 

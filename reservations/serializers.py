@@ -13,6 +13,8 @@ class ReservationSerializer(serializers.ModelSerializer):
     d'appels supplémentaires pour afficher une carte de réservation).
     """
 
+    # On inclut ici des champs provenant du créneau et du terrain liés à la réservation, 
+    # pour que le frontend puisse afficher toutes les informations nécessaires sans avoir à faire des requêtes supplémentaires.
     terrain_id = serializers.IntegerField(source='creneau.terrain.id', read_only=True)
     terrain_nom = serializers.CharField(source='creneau.terrain.nom', read_only=True)
     terrain_image = serializers.SerializerMethodField()
@@ -38,6 +40,9 @@ class ReservationSerializer(serializers.ModelSerializer):
         premiere_photo = reservation.creneau.terrain.photos.first()
         if not premiere_photo:
             return None
+
+        # build_absolute_uri transforme "/media/xxx.jpg" en une URL complète
+        # (http://.../media/xxx.jpg) utilisable directement par le frontend.
         request = self.context.get('request')
         url = premiere_photo.image.url
         return request.build_absolute_uri(url) if request else url
@@ -45,7 +50,7 @@ class ReservationSerializer(serializers.ModelSerializer):
     def get_ticket(self, reservation):
         # Le ticket n'existe qu'une fois le paiement confirmé par l'IPN
         # (voir PaiementIPNView) : pas de ticket tant que c'est "en_attente".
-        ticket = getattr(reservation, 'ticket', None)
+        ticket = getattr(reservation, 'ticket', None) #getattr() est utilisé pour récupérer l'attribut 'ticket' de l'objet reservation. Si l'attribut n'existe pas, il renvoie None au lieu de lever une exception. Cela permet de gérer les cas où la réservation n'a pas encore de ticket associé (par exemple, si le paiement n'a pas été confirmé).
         if ticket is None:
             return None
         return {'id': ticket.id, 'code': str(ticket.code), 'utilise': ticket.utilise}
@@ -71,9 +76,14 @@ class ReservationCreateSerializer(serializers.ModelSerializer):
         if creneau.statut != Creneau.Statut.DISPONIBLE:
             raise serializers.ValidationError("Ce créneau n'est plus disponible.")
 
+        #make_aware() est utilisé pour convertir un objet datetime naïf (sans information de fuseau horaire) 
+        # en un objet datetime conscient (avec information de fuseau horaire). Cela est nécessaire car Django utilise des objets datetime conscients pour gérer les dates et heures.
         debut_creneau = timezone.make_aware(
             timezone.datetime.combine(creneau.date, creneau.heure_debut)
         )
+
+        # On ne peut pas réserver un créneau qui est déjà passé : inutile de le montrer comme "disponible" 
+        # dans la liste des créneaux, mais on vérifie quand même côté serveur pour éviter les réservations frauduleuses.
         if debut_creneau <= timezone.now():
             raise serializers.ValidationError("Ce créneau est déjà passé.")
 
@@ -98,6 +108,8 @@ class ReservationCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         creneau = validated_data['creneau']
 
+        # On crée la réservation avec le statut "en_attente" : le paiement de l'avance n'a pas encore été confirmé par PayTech.
+        # Le reste (montant total, statut...) est déduit côté serveur.
         reservation = Reservation.objects.create(
             amateur=self.context['request'].user,
             montant_total=creneau.prix,

@@ -17,6 +17,8 @@ class TicketSerializer(serializers.ModelSerializer):
     ne génère pas d'image, juste la valeur à encoder.
     """
 
+    # On inclut ici des champs provenant de la réservation et du créneau liés au ticket,
+    # pour que le frontend puisse afficher toutes les informations nécessaires sans avoir à faire des requêtes supplémentaires.
     reservation = serializers.IntegerField(source='reservation.id', read_only=True)
     client = serializers.CharField(source='reservation.nom_complet', read_only=True)
     telephone = serializers.CharField(source='reservation.telephone', read_only=True)
@@ -40,11 +42,13 @@ class ValiderTicketSerializer(serializers.Serializer):
 
     code = serializers.UUIDField()
 
+    # On stocke le ticket validé dans l'instance du serializer pour que la vue puisse y accéder après validation.
     def validate_code(self, value):
         ticket = Ticket.objects.filter(code=value).first()
         if ticket is None:
             raise serializers.ValidationError("Code de ticket invalide.")
 
+        # On vérifie que le ticket appartient bien à un de nos terrains (le gérant connecté est bien le propriétaire du terrain).
         request = self.context['request']
         if ticket.reservation.creneau.terrain.gerant_id != request.user.id:
             raise serializers.ValidationError("Ce ticket ne concerne pas un de vos terrains.")

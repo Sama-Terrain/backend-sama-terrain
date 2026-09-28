@@ -10,92 +10,110 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
     volumes:
       # Les données Postgres survivent aux redémarrages/rebuilds du conteneur.
       - postgres_data:/var/lib/postgresql/data
 
+    ports:
+      # Permet de se connecter à PostgreSQL depuis l'extérieur
+      # avec DBeaver, pgAdmin, etc.
+      - "5432:5432"
+
+    # Vérifie que PostgreSQL est réellement prêt avant
+    # de démarrer les services qui en dépendent.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
 
+
   # API Django
   backend:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
-    
+
     container_name: sama_terrain_backend
     restart: unless-stopped
+
     env_file:
       - .env
+
     environment:
-      # Écrase la valeur du .env (vide/sqlite en local) pour pointer vers
-      # le conteneur "db" ci-dessus, joignable par son nom de service.
+      # Connexion à PostgreSQL via le nom du service Docker "db".
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      # Le service IA tourne dans son propre conteneur, joignable par son
-      # nom de service sur le réseau Docker interne.
+
+      # Connexion au micro-service IA via le nom du service Docker "ia".
       IA_SERVICE_URL: http://ia:8001
+
     ports:
       - "8000:8000"
+
     volumes:
-      # Les fichiers uploadés (photos de terrains, documents gérants...)
-      # survivent aux redémarrages du conteneur.
+      # Les fichiers uploadés survivent aux redémarrages du conteneur.
       - media_data:/app/media
+
     depends_on:
       db:
         condition: service_healthy
       ia:
         condition: service_started
-  
+
+
   # Application React/Vite (frontend)
   frontend:
     build:
       context: ../frontend-sama-terrain
       dockerfile: Dockerfile
-    
-    container_name: sama_terrain_frontend     
-    restart: unless-stopped      
 
-    ports:       
+    container_name: sama_terrain_frontend
+    restart: unless-stopped
+
+    ports:
       - "5173:80"
 
     depends_on:
       - backend
 
-  # Micro-service IA (FastAPI), séparé de Django (voir dossier IA/) :
-  # analyse de la demande / prix recommandés, et chatbot d'assistance.
+
+  # Micro-service IA (FastAPI)
   ia:
-    build: 
-     context: ../ia-sama-terrain
-     dockerfile: Dockerfile
+    build:
+      context: ../ia-sama-terrain
+      dockerfile: Dockerfile
 
     restart: unless-stopped
+
     env_file:
       - ../ia-sama-terrain/.env
+
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      # Le téléchargement "xet" (rapide) de HuggingFace échoue parfois selon
-      # le réseau : on force le téléchargement HTTP classique, plus lent
-      # mais plus fiable.
+
+      # Désactive le téléchargement Xet de HuggingFace
+      # pour utiliser le téléchargement HTTP classique.
       HF_HUB_DISABLE_XET: "1"
+
     ports:
       - "8001:8001"
+
     volumes:
-      # Cache du modèle d'embeddings HuggingFace : évite de le retélécharger
-      # à chaque redémarrage du conteneur (le réseau vers HF peut être
-      # instable, autant ne payer ce coût qu'une seule fois).
+      # Cache des modèles HuggingFace.
       - ia_hf_cache:/root/.cache/huggingface
+
     depends_on:
       db:
         condition: service_healthy
 
+
 volumes:
   postgres_data:
     name: sama_terrain_postgres_data
+
   media_data:
     name: sama_terrain_media_data
+
   ia_hf_cache:
     name: sama_terrain_ia_hf_cache
-

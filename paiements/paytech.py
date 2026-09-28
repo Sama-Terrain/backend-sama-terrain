@@ -31,6 +31,9 @@ def creer_demande_paiement(
         'cancel_url': cancel_url,
         'env': 'test',  # à passer à 'prod' une fois les vraies clés PayTech en place
     }
+
+    # target_payment est optionnel : si on le fournit, PayTech ne demandera pas à l'utilisateur 
+    # de choisir un moyen de paiement, mais l'enverra directement sur la page de paiement de ce moyen-là.
     if target_payment:
         donnees_requete['target_payment'] = target_payment
 
@@ -46,6 +49,12 @@ def creer_demande_paiement(
     reponse.raise_for_status()  # lève une exception si PayTech renvoie une erreur HTTP
 
     donnees = reponse.json()
+
+    # Si PayTech refuse la demande, il renvoie un JSON avec un champ "error" : 
+    # on lève une exception pour que le backend Django sache que ça a échoué.
+    if 'error' in donnees:
+        raise Exception(donnees['error'])
+
     return {
         'payment_url': donnees.get('redirect_url'),
         'token': donnees.get('token'),

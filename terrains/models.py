@@ -38,7 +38,7 @@ class Terrain(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='terrains',
-        limit_choices_to={'role': 'gerant'},
+        limit_choices_to={'role': 'gerant'}, #limite les choix possibles à ceux dont le rôle est "gerant" (pour éviter d'associer un terrain à un amateur ou un admin).
     )
 
     nom = models.CharField(max_length=150)

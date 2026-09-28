@@ -30,22 +30,32 @@ class GerantDashboardView(APIView):
 
     permission_classes = [EstGerantAbonnementActif]
 
+    # get est un endpoint API qui permet de récupérer les statistiques clés et le planning du jour 
+    # pour tous les terrains du gérant connecté. Il renvoie le nombre de réservations confirmées pour 
+    # aujourd'hui, les revenus du mois, le taux d'occupation des créneaux du mois, la note moyenne des 
+    # terrains, et le planning détaillé des réservations confirmées pour aujourd'hui.
     def get(self, request):
         terrains = Terrain.objects.filter(gerant=request.user)
         aujourdhui = timezone.localdate()
         debut_mois = aujourdhui.replace(day=1)
 
+        # On récupère toutes les réservations confirmées pour les terrains du gérant, ainsi que celles qui sont prévues pour aujourd'hui.
         reservations_confirmees = Reservation.objects.filter(
             creneau__terrain__in=terrains, statut=Reservation.Statut.CONFIRMEE
         )
 
+        # On récupère les réservations confirmées pour aujourd'hui, afin de les inclure dans le planning du jour.
         reservations_aujourdhui = reservations_confirmees.filter(creneau__date=aujourdhui)
 
+        # On calcule les revenus du mois en sommant le montant de tous les paiements liés aux 
+        # réservations confirmées pour les terrains du gérant, depuis le début du mois.
         revenus_mois = Paiement.objects.filter(
             reservation__creneau__terrain__in=terrains,
             cree_le__date__gte=debut_mois,
         ).aggregate(total=Sum('montant'))['total'] or 0
 
+        # On calcule le taux d'occupation des créneaux du mois en comparant le nombre de créneaux confirmés
+        # avec le nombre total de créneaux pour les terrains du gérant, depuis le début du mois. Si aucun créneau n'est disponible, le taux d'occupation est de 0.
         creneaux_du_mois = Creneau.objects.filter(
             terrain__in=terrains, date__gte=debut_mois, date__lte=aujourdhui
         )
@@ -55,6 +65,7 @@ class GerantDashboardView(APIView):
 
         note_moyenne = terrains.aggregate(moyenne=Avg('note_moyenne'))['moyenne'] or 0
 
+        # On renvoie les statistiques clés et le planning du jour sous forme de dictionnaire JSON,
         return Response({
             'reservations_aujourdhui': reservations_aujourdhui.count(),
             'revenus_mois': revenus_mois,
@@ -76,16 +87,24 @@ class GerantRevenusView(APIView):
 
     permission_classes = [EstGerantAbonnementActif]
 
+    # get est un endpoint API qui permet de récupérer les revenus et les statistiques de fréquentation 
+    # pour tous les terrains du gérant connecté. Il renvoie les revenus du mois, les revenus d'hier, 
+    # les avances reçues, le solde à percevoir, l'évolution des revenus sur les 30 derniers jours,
+    # le nombre de réservations confirmées par jour sur les 7 derniers jours, la répartition des paiements 
+    # par moyen de paiement, et l'historique détaillé des paiements 
     def get(self, request):
         terrains = Terrain.objects.filter(gerant=request.user)
         paiements = Paiement.objects.filter(reservation__creneau__terrain__in=terrains)
 
+        # On calcule les dates importantes pour les statistiques : aujourd'hui, hier, 
+        # le début du mois, il y a 30 jours et il y a 7 jours.
         aujourdhui = timezone.localdate()
         hier = aujourdhui - timedelta(days=1)
         debut_mois = aujourdhui.replace(day=1)
         il_y_a_30_jours = aujourdhui - timedelta(days=29)
         il_y_a_7_jours = aujourdhui - timedelta(days=6)
 
+        # On calcule les revenus du mois, les revenus d'hier, les avances reçues et le solde à percevoir pour les terrains du gérant.
         revenus_mois = paiements.filter(cree_le__date__gte=debut_mois).aggregate(
             total=Sum('montant'))['total'] or 0
         revenus_hier = paiements.filter(cree_le__date=hier).aggregate(total=Sum('montant'))['total'] or 0
@@ -93,6 +112,8 @@ class GerantRevenusView(APIView):
             type=Paiement.Type.AVANCE, cree_le__date__gte=debut_mois
         ).aggregate(total=Sum('montant'))['total'] or 0
 
+        # On calcule le solde à percevoir en sommant le reste à payer de toutes les réservations confirmées pour les terrains du gérant,
+        # en excluant celles qui ont déjà été réglées par un paiement de type "solde".
         reservations_confirmees = Reservation.objects.filter(
             creneau__terrain__in=terrains, statut=Reservation.Statut.CONFIRMEE
         )
@@ -139,6 +160,7 @@ class GerantRevenusView(APIView):
             ).order_by('-cree_le')[:50]
         ]
 
+        # On renvoie toutes les statistiques et les données calculées sous forme de dictionnaire JSON.
         return Response({
             'revenus_mois': revenus_mois,
             'revenus_hier': revenus_hier,
@@ -162,9 +184,12 @@ class GerantAbonnementView(APIView):
 
     permission_classes = [EstGerant]
 
+    # get est un endpoint API qui permet de récupérer l'état de l'abonnement du gérant connecté (essai, actif, expiré),
     def get(self, request):
         abonnement, _ = Abonnement.objects.get_or_create(gerant=request.user)
 
+        # On renvoie l'état de l'abonnement sous forme de dictionnaire JSON, avec le statut, 
+        # la date de fin d'essai, la date de fin d'abonnement et le prix mensuel.    
         return Response({
             'statut': abonnement.statut,
             'date_fin_essai': abonnement.date_fin_essai,
@@ -188,9 +213,11 @@ class GerantInsightsIAView(APIView):
 
     permission_classes = [EstGerantAbonnementActif]
 
+    # get est un endpoint API qui permet de récupérer les insights IA pour tous les terrains du gérant connecté.
     def get(self, request):
         terrains = Terrain.objects.filter(gerant=request.user)
 
+        # On demande au micro-service IA (FastAPI) ses prédictions de demande pour chaque terrain du gérant,
         recommandations_ia = []
         for terrain in terrains:
             try:
@@ -202,6 +229,7 @@ class GerantInsightsIAView(APIView):
             except requests.RequestException:
                 continue
 
+        # On calcule l'occupation réelle des 7 prochains jours pour les terrains du gérant,
         aujourdhui = timezone.localdate()
         occupation_7_jours = []
         for i in range(7):
@@ -211,10 +239,12 @@ class GerantInsightsIAView(APIView):
             confirmes = creneaux_jour.filter(statut=Creneau.Statut.CONFIRME).count()
             occupation_7_jours.append({
                 'date': str(jour),
-                'label': f"{JOURS_FR_COURT[jour.weekday()]} {jour.strftime('%d')}",
+                'label': f"{JOURS_FR_COURT[jour.weekday()]} {jour.strftime('%d')}", #weekday() et strftime('%d') permettent de formater la date pour l'affichage dans le tableau de bord.
                 'taux': round(confirmes / total * 100) if total else 0,
             })
 
+        # On récupère les créneaux dont le prix recommandé par l'IA diffère du prix actuel, 
+        # pour alerter le gérant sur les opportunités de réajustement tarifaire.
         creneaux_repricing = (
             Creneau.objects.filter(
                 terrain__in=terrains,
@@ -226,6 +256,8 @@ class GerantInsightsIAView(APIView):
             .select_related('terrain')
             .order_by('date', 'heure_debut')[:3]
         )
+
+        # On prépare la liste des recommandations tarifaires à afficher dans le tableau de bord du gérant,
         recommandations_tarifaires = [
             {
                 'id': c.id,
@@ -241,6 +273,9 @@ class GerantInsightsIAView(APIView):
 
         alertes = []
 
+        # On vérifie s'il existe un créneau sous-tarifé (prix recommandé par l'IA supérieur au prix 
+        # actuel) pour les terrains du gérant, afin de générer une alerte pour le gérant. 
+        # On ne prend que le premier créneau trouvé pour éviter de surcharger le tableau de bord.
         creneau_sous_tarife = (
             Creneau.objects.filter(
                 terrain__in=terrains,
@@ -249,7 +284,7 @@ class GerantInsightsIAView(APIView):
                 niveau_demande=Creneau.NiveauDemande.ELEVE,
                 prix_recommande_ia__isnull=False,
             )
-            .exclude(prix_recommande_ia=F('prix'))
+            .exclude(prix_recommande_ia=F('prix')) # F est django.db.models.F, qui permet de comparer deux champs d'un même modèle dans une requête. Ici, on exclut les créneaux dont le prix recommandé par l'IA est égal au prix actuel.
             .select_related('terrain')
             .order_by('date', 'heure_debut')
             .first()
@@ -269,6 +304,9 @@ class GerantInsightsIAView(APIView):
                 'creneau_id': creneau_sous_tarife.id,
             })
 
+        # On vérifie s'il existe des clients fidèles inactifs (ayant réservé au moins 2 fois mais 
+        # n'ayant pas réservé depuis plus de 30 jours) pour les terrains du gérant, afin de générer 
+        # une alerte pour le gérant.
         il_y_a_30_jours = aujourdhui - timedelta(days=30)
         clients_fideles_inactifs = (
             Reservation.objects.filter(
@@ -290,6 +328,8 @@ class GerantInsightsIAView(APIView):
                 'creneau_id': None,
             })
 
+        # On renvoie les recommandations IA, l'occupation réelle des 7 prochains jours,
+        # les recommandations tarifaires et les alertes sous forme de dictionnaire JSON.
         return Response({
             'recommandations_ia': recommandations_ia[:4],
             'occupation_7_jours': occupation_7_jours,
@@ -310,6 +350,9 @@ class IAPredictionsView(APIView):
 
     permission_classes = [EstGerantAbonnementActif]
 
+    # get est un endpoint API qui permet de récupérer les prédictions de demande pour un terrain donné,
+    # en interrogeant le micro-service IA (FastAPI). Si le terrain n'appartient pas au gérant connecté, 
+    # on renvoie une erreur 404. Si le service IA est indisponible, on renvoie une erreur 503 avec un message d'indisponibilité.
     def get(self, request, terrain_id):
         terrain = Terrain.objects.filter(pk=terrain_id, gerant=request.user).first()
         if terrain is None:
@@ -342,6 +385,10 @@ class ChatbotView(APIView):
 
     permission_classes = [AllowAny]
 
+    # post est un endpoint API qui permet d'envoyer un message au micro-service IA (FastAPI) pour 
+    # obtenir une réponse du chatbot. Le message est récupéré depuis le corps de la requête. Si 
+    # le message est vide, on renvoie une erreur 400. Si le service IA est indisponible ou si une 
+    # erreur se produit lors de la requête, on renvoie un message par défaut du chatbot.
     def post(self, request):
         message = request.data.get('message', '').strip()
         if not message:

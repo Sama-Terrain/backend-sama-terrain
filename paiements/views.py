@@ -34,6 +34,7 @@ class InitierPaiementView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+        # On récupère la réservation et le moyen de paiement choisi par l'amateur.
         reservation = serializer.validated_data['reservation']
         moyen_paiement = serializer.validated_data['moyen_paiement']
         terrain = reservation.creneau.terrain
@@ -65,6 +66,10 @@ class InitierPaiementView(APIView):
         # l'amateur arrive directement sur l'écran de paiement (QR code Wave,
         # ou saisie OTP Orange Money) sans ressaisir son numéro.
         telephone_national = reservation.telephone.removeprefix('221')
+
+        # On construit l'URL finale vers laquelle rediriger l'amateur, en ajoutant
+        # les paramètres de pré-remplissage à l'URL fournie par PayTech.
+        #urlencode() transforme un dictionnaire en chaîne de requête (ex: {'a': 1, 'b': 2} devient "a=1&b=2").
         parametres_prefill = urlencode({
             'pn': f"+{reservation.telephone}",
             'nn': telephone_national,
@@ -72,6 +77,8 @@ class InitierPaiementView(APIView):
             'tp': moyen_paiement,
             'nac': '1',
         })
+
+        # On ajoute les paramètres de pré-remplissage à l'URL fournie par PayTech, en utilisant '?' ou '&' selon que l'URL contient déjà des paramètres.
         separateur = '&' if '?' in resultat['payment_url'] else '?'
         payment_url = f"{resultat['payment_url']}{separateur}{parametres_prefill}"
 
@@ -95,25 +102,32 @@ class PaiementIPNView(APIView):
         # il a la forme "RES-<id_reservation>-<timestamp>".
         ref_command = request.data.get('ref_command', '')
 
+        # On récupère l'id de la réservation depuis le ref_command, pour savoir quelle réservation mettre à jour.
+        # .split permet de diviser une chaîne en plusieurs parties selon un séparateur (ici '-'), et [1] récupère la deuxième partie (l'id de la réservation).
         try:
             reservation_id = int(ref_command.split('-')[1])
         except (IndexError, ValueError):
             return Response({'detail': "ref_command invalide."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # On récupère la réservation correspondante depuis la base de données. Si elle n'existe pas, on renvoie une erreur 404.
         reservation = Reservation.objects.filter(pk=reservation_id).first()
 
         if reservation is None:
             return Response({'detail': "Réservation introuvable."}, status=status.HTTP_404_NOT_FOUND)
 
+        # On met à jour la réservation et le créneau pour indiquer que le paiement a été confirmé.
         reservation.statut = Reservation.Statut.CONFIRMEE
         reservation.moyen_paiement = request.data.get('payment_method', '')
         reservation.transaction_id = request.data.get('token', '')
         reservation.save()
 
+        # On met à jour le créneau pour indiquer qu'il est confirmé et plus disponible.
         creneau = reservation.creneau
         creneau.statut = Creneau.Statut.CONFIRME
         creneau.save()
 
+        # On crée un enregistrement de paiement pour cette réservation, avec le type "avance", 
+        # le montant payé, le moyen de paiement et l'identifiant de transaction fournis par PayTech.
         Paiement.objects.create(
             type=Paiement.Type.AVANCE,
             reservation=reservation,
@@ -160,6 +174,7 @@ class AbonnementInitierView(APIView):
         # savoir quel abonnement activer.
         ref_command = f"ABO-{request.user.id}-{int(timezone.now().timestamp())}"
 
+        # On crée la demande de paiement PayTech pour l'abonnement mensuel, avec les URLs de notification et de redirection appropriées.
         resultat = creer_demande_paiement(
             item_name="Abonnement mensuel Sama-Terrain",
             item_price=PRIX_ABONNEMENT_MENSUEL,
@@ -191,12 +206,16 @@ class AbonnementIPNView(APIView):
         except (IndexError, ValueError):
             return Response({'detail': "ref_command invalide."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # On récupère le gérant et son abonnement correspondant depuis la base de données. 
+        # Si l'un ou l'autre n'existe pas, on renvoie une erreur 404.
         gerant = User.objects.filter(pk=gerant_id).first()
         abonnement = Abonnement.objects.filter(gerant=gerant).first() if gerant else None
 
         if abonnement is None:
             return Response({'detail': "Abonnement introuvable."}, status=status.HTTP_404_NOT_FOUND)
 
+        # On active ou prolonge l'abonnement de 30 jours à partir de la date de fin actuelle si elle 
+        # est encore dans le futur, sinon à partir de maintenant.
         maintenant = timezone.now()
 
         # Si l'abonnement est encore actif, on ajoute 30 jours À PARTIR de
@@ -206,10 +225,13 @@ class AbonnementIPNView(APIView):
             abonnement.date_fin_abonnement and abonnement.date_fin_abonnement > maintenant
         ) else maintenant
 
+        # On met à jour la date de fin d'abonnement et le statut, puis on enregistre le paiement dans l'historique.
         abonnement.date_fin_abonnement = depart + timedelta(days=30)
         abonnement.statut = Abonnement.Statut.ACTIF
         abonnement.save()
 
+        # On crée un enregistrement de paiement pour cet abonnement, avec le type "abonnement", 
+        # le montant payé, le moyen de paiement et l'identifiant de transaction fournis par PayTech.
         Paiement.objects.create(
             type=Paiement.Type.ABONNEMENT,
             abonnement=abonnement,
@@ -218,6 +240,8 @@ class AbonnementIPNView(APIView):
             transaction_id=request.data.get('token', ''),
         )
 
+        # On notifie N8n pour envoyer un email et un WhatsApp au gérant, 
+        # l'informant que son abonnement est activé ou prolongé.
         notifier_n8n('abonnement_active', {
             'email_gerant': abonnement.gerant.email,
             'date_fin_abonnement': str(abonnement.date_fin_abonnement),
@@ -239,15 +263,23 @@ class RappelsReservationsView(APIView):
 
     permission_classes = [AllowAny]
 
+    # get est un endpoint API qui permet de rechercher les réservations confirmées dont le match a lieu
+    # dans moins de 3 heures et pour lesquelles aucun rappel n'a encore été envoyé. Pour chaque réservation trouvée, 
+    # il envoie un événement à N8n pour notifier l'amateur, puis marque la réservation comme "rappel envoyé" pour éviter les doublons.
     def get(self, request):
         maintenant = timezone.now()
         dans_3h = maintenant + timedelta(hours=3)
 
+        # On récupère toutes les réservations confirmées dont le rappel n'a pas encore été envoyé, 
+        # en utilisant select_related pour optimiser les requêtes et éviter les requêtes supplémentaires 
+        # pour accéder aux relations (creneau, terrain, amateur).
         reservations = Reservation.objects.filter(
             statut=Reservation.Statut.CONFIRMEE,
             rappel_envoye=False,
         ).select_related('creneau', 'creneau__terrain', 'amateur')
 
+
+        # On parcourt les réservations et on vérifie si le début du créneau est dans moins de 3 heures.
         nb_envoyes = 0
         for reservation in reservations:
             creneau = reservation.creneau
@@ -258,6 +290,8 @@ class RappelsReservationsView(APIView):
             if not (maintenant <= debut <= dans_3h):
                 continue
 
+            # On notifie N8n pour envoyer un email et un WhatsApp à l'amateur, 
+            # l'informant que son match approche et qu'il doit se préparer.
             notifier_n8n('rappel_reservation', {
                 'email_amateur': reservation.amateur.email,
                 'nom_amateur': reservation.amateur.prenom,
@@ -266,6 +300,8 @@ class RappelsReservationsView(APIView):
                 'date': str(creneau.date),
                 'heure': str(creneau.heure_debut),
             })
+
+            # On marque la réservation comme "rappel envoyé" pour ne pas renvoyer le rappel à nouveau.
             reservation.rappel_envoye = True
             reservation.save(update_fields=['rappel_envoye'])
             nb_envoyes += 1
@@ -285,15 +321,24 @@ class AlertesExpirationAbonnementView(APIView):
 
     permission_classes = [AllowAny]
 
+
+    # get est un endpoint API qui permet de rechercher les abonnements (essai ou payé) qui expirent dans moins de 
+    # 3 jours et pour lesquels aucune alerte n'a encore été envoyée.Pour chaque abonnement trouvé, 
+    # il notifie N8n pour envoyer un email et un WhatsApp au gérant, puis marque l'abonnement comme 
+    # "alerte envoyée" pour éviter les doublons.
     def get(self, request):
         maintenant = timezone.now()
         dans_3_jours = maintenant + timedelta(days=3)
 
+        # On récupère tous les abonnements (essai ou payé) dont l'alerte d'expiration n'a pas encore été envoyée, 
+        # en utilisant select_related pour optimiser les requêtes et éviter les requêtes supplémentaires pour accéder aux relations (gérant).
         abonnements = Abonnement.objects.filter(
             statut__in=[Abonnement.Statut.ESSAI, Abonnement.Statut.ACTIF],
             alerte_expiration_envoyee=False,
         ).select_related('gerant')
 
+
+        # On parcourt les abonnements et on vérifie si la date de fin d'essai ou d'abonnement est dans moins de 3 jours.
         nb_envoyes = 0
         for abonnement in abonnements:
             date_fin = (
@@ -305,11 +350,15 @@ class AlertesExpirationAbonnementView(APIView):
             if not date_fin or not (maintenant <= date_fin <= dans_3_jours):
                 continue
 
+            # On notifie N8n pour envoyer un email et un WhatsApp au gérant, 
+            # l'informant que son abonnement approche de l'expiration et qu'il doit le renouveler.
             notifier_n8n('abonnement_expire_bientot', {
                 'email_gerant': abonnement.gerant.email,
                 'nom_gerant': abonnement.gerant.prenom,
                 'date_fin': str(date_fin),
             })
+
+            # On marque l'abonnement comme "alerte envoyée" pour ne pas renvoyer l'alerte à nouveau.
             abonnement.alerte_expiration_envoyee = True
             abonnement.save(update_fields=['alerte_expiration_envoyee'])
             nb_envoyes += 1
@@ -328,6 +377,10 @@ class SoldeView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    # post est un endpoint API qui permet d'enregistrer manuellement le paiement du solde restant 
+    # pour une réservation spécifique, payé sur place en cash ou en mobile money direct (pas via PayTech).
+    # Il prend l'identifiant de la réservation et le moyen de paiement choisi par l'amateur en paramètre, 
+    # et crée un enregistrement de paiement dans la base de données.
     def post(self, request):
         serializer = SoldeSerializer(data=request.data, context={'request': request})
         if not serializer.is_valid():
@@ -335,6 +388,8 @@ class SoldeView(APIView):
 
         reservation = serializer.validated_data['reservation']
 
+        # On vérifie que la réservation appartient bien à l'amateur connecté, qu'elle est 
+        # confirmée et qu'elle n'a pas encore été réglée.
         Paiement.objects.create(
             type=Paiement.Type.SOLDE,
             reservation=reservation,

@@ -6,6 +6,7 @@ from reservations.models import Reservation
 class InitierPaiementSerializer(serializers.Serializer):
     """Vérifie qu'une réservation existe, appartient bien à l'amateur, et attend un paiement."""
 
+    # On ne demande que l'identifiant de la réservation et le moyen de paiement choisi par l'amateur.
     reservation = serializers.PrimaryKeyRelatedField(queryset=Reservation.objects.all())
 
     # Le moyen déjà choisi par l'amateur dans notre interface (PaiementMethode.jsx) :
@@ -25,6 +26,7 @@ class InitierPaiementSerializer(serializers.Serializer):
 class SoldeSerializer(serializers.Serializer):
     """Utilisé pour enregistrer le paiement du solde restant, payé sur place."""
 
+    #PrimaryKeyRelatedField est utilisé pour valider que la réservation existe et appartient bien à l'amateur connecté.
     reservation = serializers.PrimaryKeyRelatedField(queryset=Reservation.objects.all())
     moyen_paiement = serializers.ChoiceField(choices=['cash', 'wave', 'orange_money'])
 

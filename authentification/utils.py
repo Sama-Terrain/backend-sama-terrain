@@ -34,7 +34,7 @@ def generer_et_envoyer_code(user):
                 "Ce code est valable 15 minutes."
             ),
             from_email=None,  # utilise DEFAULT_FROM_EMAIL défini dans settings.py
-            recipient_list=[user.email],
+            recipient_list=[user.email], # liste des destinataires (ici, juste l'email de l'utilisateur)
         )
     except Exception as erreur:
         # On affiche juste l'erreur dans les logs du serveur (visible sur
@@ -49,6 +49,9 @@ def generer_et_envoyer_code_reinitialisation(user):
     sujet/texte de l'email est différent pour ne pas semer la confusion avec
     un code de vérification de compte.
     """
+    # Un nombre aléatoire à 6 chiffres, toujours écrit sur 6 caractères
+    # randint(0, 999999) génère un entier aléatoire entre 0 et 999999 inclus. Le formatage f"{...:06d}" 
+    # permet de s'assurer que le nombre est représenté sur 6 chiffres, en ajoutant des zéros à gauche si nécessaire (ex: "007421" au lieu de "7421").
     code = f"{random.randint(0, 999999):06d}"
 
     user.code_verification = code
