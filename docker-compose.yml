@@ -52,7 +52,7 @@ services:
   # Application React/Vite (frontend)
   frontend:
     build:
-      context: ../frontend-sama-terrain
+      context: ../frontend
       dockerfile: Dockerfile
     
     container_name: sama_terrain_frontend     
