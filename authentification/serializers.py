@@ -1,3 +1,4 @@
+import re
 from datetime import timedelta
 
 from django.conf import settings
@@ -38,6 +39,28 @@ class UpdateProfilSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['prenom', 'nom', 'telephone', 'ville_preferee']
+
+    def validate_prenom(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Le prénom est obligatoire.")
+        return value.strip()
+
+    def validate_nom(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Le nom est obligatoire.")
+        return value.strip()
+
+    def validate_telephone(self, value):
+        # Champ facultatif (blank=True) : uniquement validé s'il est fourni.
+        # Même règle que estNumeroSenegalaisValide() côté frontend (préfixes
+        # mobiles sénégalais valides, indicatif 221 inclus).
+        if not value:
+            return value
+        if not re.fullmatch(r'221(70|75|76|77|78)\d{7}', value):
+            raise serializers.ValidationError(
+                'Numéro de téléphone invalide (préfixe attendu : 70, 75, 76, 77 ou 78).'
+            )
+        return value
 
 
 class RegisterSerializer(serializers.ModelSerializer):

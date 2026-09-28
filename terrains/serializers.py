@@ -121,3 +121,55 @@ class TerrainCreateUpdateSerializer(serializers.ModelSerializer):
         # prévue pour ça dans la spec). Un nouveau terrain est actif par
         # défaut (voir Terrain.actif dans models.py).
 
+    # Fourchette de capacité plausible pour chaque type de terrain, déduite
+    # directement du format annoncé par le type ("Foot à 5" = 5 joueurs par
+    # équipe, donc 10 sur le terrain, plus quelques remplaçants). Même règle
+    # appliquée côté frontend (voir AjouterTerrain.jsx).
+    CAPACITE_PAR_TYPE = {
+        'Foot à 5': (10, 14),
+        'Foot à 6': (12, 16),
+        'Foot à 7': (14, 18),
+        'Foot à 11': (22, 30),
+    }
+
+    def validate_nom(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Le nom du terrain est obligatoire.")
+        return value.strip()
+
+    def validate_adresse(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("L'adresse est obligatoire.")
+        return value.strip()
+
+    def validate_prix_heure(self, value):
+        if value < 500:
+            raise serializers.ValidationError("Le prix par heure doit être au moins 500 FCFA.")
+        return value
+
+    def validate(self, data):
+        # Sur un PATCH partiel, un champ peut être absent de `data` : on va
+        # chercher sa valeur actuelle sur l'instance existante pour comparer
+        # les bonnes valeurs entre elles.
+        type_terrain = data.get('type', getattr(self.instance, 'type', None))
+        capacite = data.get('capacite', getattr(self.instance, 'capacite', None))
+
+        if type_terrain and capacite is not None:
+            bornes = self.CAPACITE_PAR_TYPE.get(type_terrain)
+            if bornes and not (bornes[0] <= capacite <= bornes[1]):
+                raise serializers.ValidationError({
+                    'capacite': (
+                        f"La capacité renseignée n'est pas compatible avec le type "
+                        f"\"{type_terrain}\" (attendu : entre {bornes[0]} et {bornes[1]} joueurs)."
+                    )
+                })
+
+        heure_ouverture = data.get('heure_ouverture', getattr(self.instance, 'heure_ouverture', None))
+        heure_fermeture = data.get('heure_fermeture', getattr(self.instance, 'heure_fermeture', None))
+        if heure_ouverture and heure_fermeture and heure_ouverture >= heure_fermeture:
+            raise serializers.ValidationError({
+                'heure_fermeture': "L'heure de fermeture doit être après l'heure d'ouverture.",
+            })
+
+        return data
+
