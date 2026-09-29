@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from creneaux.models import Creneau
-from gerant.permissions import EstGerant, EstGerantAbonnementActif
+from gerant.permissions import EstGerant, EstGerantAbonnementActif, EstN8n
 from paiements.models import PRIX_ABONNEMENT_MENSUEL, Abonnement, Paiement
 from reservations.models import Reservation
 from reservations.serializers import ReservationSerializer
@@ -338,6 +338,83 @@ class GerantInsightsIAView(APIView):
         })
 
 
+def _chiffres_periode(terrains, debut, fin):
+    """Chiffres réels d'une période [debut, fin], calculés depuis la base."""
+    creneaux = Creneau.objects.filter(terrain__in=terrains, date__range=(debut, fin))
+    reservations = Reservation.objects.filter(creneau__in=creneaux)
+    confirmees = reservations.filter(
+        statut__in=[Reservation.Statut.CONFIRMEE, Reservation.Statut.TERMINEE]
+    )
+
+    revenus = Paiement.objects.filter(
+        reservation__creneau__terrain__in=terrains, cree_le__date__range=(debut, fin)
+    ).aggregate(total=Sum('montant'))['total'] or 0
+
+    total_creneaux = creneaux.count()
+    creneaux_confirmes = creneaux.filter(statut=Creneau.Statut.CONFIRME).count()
+
+    # Heure de début des réservations qui a rapporté le plus sur la période.
+    meilleure_heure = (
+        confirmees.values('creneau__heure_debut')
+        .annotate(revenu=Sum('montant_total'))
+        .order_by('-revenu')
+        .first()
+    )
+
+    return {
+        'revenus': revenus,
+        'nombre_creneaux': total_creneaux,
+        # None quand il n'y a aucun créneau : pas de taux à calculer.
+        'taux_remplissage': round(creneaux_confirmes / total_creneaux * 100) if total_creneaux else None,
+        'reservations_confirmees': confirmees.count(),
+        # Inclut les réservations expirées faute de paiement dans les 15 min.
+        'annulations': reservations.filter(statut=Reservation.Statut.ANNULEE).count(),
+        'heure_la_plus_rentable': (
+            meilleure_heure['creneau__heure_debut'].strftime('%H:%M') if meilleure_heure else None
+        ),
+    }
+
+
+class RapportHebdomadaireN8nView(APIView):
+    """
+    GET /api/gerant/n8n/rapport-hebdomadaire/
+
+    Appelée chaque semaine par N8n (en-tête X-N8N-Token obligatoire).
+    Renvoie les vrais chiffres de la semaine écoulée et de la semaine
+    d'avant pour chaque gérant actif. L'agent IA de N8n rédige ensuite
+    le rapport à partir de ces chiffres et l'envoie au gérant.
+    """
+
+    permission_classes = [EstN8n]
+    # Pas de JWT ici : l'accès est contrôlé par le jeton N8n uniquement.
+    authentication_classes = []
+
+    def get(self, request):
+        aujourdhui = timezone.localdate()
+        semaine = (aujourdhui - timedelta(days=7), aujourdhui - timedelta(days=1))
+        semaine_precedente = (aujourdhui - timedelta(days=14), aujourdhui - timedelta(days=8))
+
+        rapports = []
+        for abonnement in Abonnement.objects.select_related('gerant').filter(gerant__is_active=True):
+            terrains = Terrain.objects.filter(gerant=abonnement.gerant)
+            if not abonnement.est_actif or not terrains.exists():
+                continue
+
+            rapports.append({
+                'email': abonnement.gerant.email,
+                'prenom': abonnement.gerant.prenom,
+                'terrains': [t.nom for t in terrains],
+                'semaine': _chiffres_periode(terrains, *semaine),
+                'semaine_precedente': _chiffres_periode(terrains, *semaine_precedente),
+            })
+
+        return Response({
+            'debut': str(semaine[0]),
+            'fin': str(semaine[1]),
+            'rapports': rapports,
+        })
+
+
 class IAPredictionsView(APIView):
     """
     GET /api/ia/predictions/:terrainId/
@@ -394,10 +471,18 @@ class ChatbotView(APIView):
         if not message:
             return Response({'detail': "Message vide."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Messages précédents de l'utilisateur (facultatif), utilisés par la
+        # réservation assistée. On borne leur nombre et leur taille : ils
+        # viennent du navigateur et finissent dans un prompt.
+        historique = request.data.get('historique', [])
+        if not isinstance(historique, list):
+            historique = []
+        historique = [str(m)[:500] for m in historique if isinstance(m, str) and m.strip()][-6:]
+
         try:
             reponse = requests.post(
                 f"{settings.IA_SERVICE_URL}/chatbot",
-                json={'message': message},
+                json={'message': message, 'historique': historique},
                 # Doit rester nettement supérieur au timeout LLM côté
                 # service IA (45s, voir IA/llm.py) pour laisser une marge
                 # de sécurité (réseau, requêtes DB) avant de couper.

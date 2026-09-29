@@ -7,13 +7,13 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "d43359f8-e3e1-412f-905e-18232ba9569a",
+      "id": "5b2d66d8-315a-4bf4-8a19-1778bc4f5279",
       "name": "Webhook Sama-Terrain1",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        -1040,
-        1088
+        3024,
+        1312
       ],
       "webhookId": "sama-terrain"
     },
@@ -194,13 +194,13 @@
         },
         "options": {}
       },
-      "id": "bd4e38e0-5a1a-424f-861c-3c5611a75fbb",
+      "id": "c4d61608-0993-40f2-9cb9-674c3dd7c07b",
       "name": "Switch (type d'évènement)1",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
       "position": [
-        -800,
-        1088
+        3264,
+        1312
       ]
     },
     {
@@ -209,13 +209,13 @@
         "responseBody": "={\n  \"received\": true\n}",
         "options": {}
       },
-      "id": "e173ca35-3466-4164-9ef7-7ab1c4248657",
+      "id": "43d2d14e-a5fe-4952-9d8d-392896884470",
       "name": "Répondre OK1",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        -240,
-        1088
+        3824,
+        1312
       ]
     },
     {
@@ -229,16 +229,16 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        -528,
-        784
+        3536,
+        1008
       ],
-      "id": "aba74b67-a1ef-42e4-b197-a9f29457f987",
+      "id": "ae3f2acf-23c3-4b90-8e0e-f8e4be5c1d25",
       "name": "Email - Réservation confirmée",
       "webhookId": "ece06071-f127-4ff5-a56f-4b2ab4d65fd5",
       "credentials": {
         "gmailOAuth2": {
-          "id": "CK6sxjNXVgI2Eb8a",
-          "name": "Gmail account"
+          "id": "guYqKlF7xeaV23X1",
+          "name": "Gmail account 3"
         }
       }
     },
@@ -253,16 +253,16 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        -528,
-        1184
+        3536,
+        1376
       ],
-      "id": "1847d75b-0eff-4452-bf12-11131b222d46",
+      "id": "f8487062-c352-4f89-b965-d55a7133be8f",
       "name": "Email - Abonnement activé",
       "webhookId": "ece06071-f127-4ff5-a56f-4b2ab4d65fd5",
       "credentials": {
         "gmailOAuth2": {
-          "id": "CK6sxjNXVgI2Eb8a",
-          "name": "Gmail account"
+          "id": "guYqKlF7xeaV23X1",
+          "name": "Gmail account 3"
         }
       }
     },
@@ -277,16 +277,16 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        -528,
-        1376
+        3536,
+        1552
       ],
-      "id": "7433383c-ea38-4675-b8a5-db4549f6049d",
+      "id": "faed9c9b-f3fb-48ae-929f-2885493758d9",
       "name": "Email - Nouvelle demande gérant",
       "webhookId": "ece06071-f127-4ff5-a56f-4b2ab4d65fd5",
       "credentials": {
         "gmailOAuth2": {
-          "id": "CK6sxjNXVgI2Eb8a",
-          "name": "Gmail account"
+          "id": "guYqKlF7xeaV23X1",
+          "name": "Gmail account 3"
         }
       }
     },
@@ -301,16 +301,16 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        -528,
-        1568
+        3536,
+        1888
       ],
-      "id": "12371de3-025b-497d-82cf-d3fb9db3a7c5",
+      "id": "0c1f7e7a-3373-4699-bb38-fce90f8806aa",
       "name": "Email - Rappel réservation",
       "webhookId": "ece06071-f127-4ff5-a56f-4b2ab4d65fd5",
       "credentials": {
         "gmailOAuth2": {
-          "id": "CK6sxjNXVgI2Eb8a",
-          "name": "Gmail account"
+          "id": "guYqKlF7xeaV23X1",
+          "name": "Gmail account 3"
         }
       }
     },
@@ -325,18 +325,261 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        -528,
-        1760
+        3536,
+        2096
       ],
-      "id": "99982b6d-1aaf-4a3a-b00f-bec394ab8aa9",
+      "id": "3b34e2d9-33bf-4a15-8955-92c3739c3731",
       "name": "Email - Alerte expiration abonnement",
       "webhookId": "ece06071-f127-4ff5-a56f-4b2ab4d65fd5",
       "credentials": {
         "gmailOAuth2": {
-          "id": "CK6sxjNXVgI2Eb8a",
-          "name": "Gmail account"
+          "id": "guYqKlF7xeaV23X1",
+          "name": "Gmail account 3"
         }
       }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "469f8c71-79f9-4321-9d3a-e153a977e34f",
+      "name": "Chaque lundi 8h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        3024,
+        2928
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.sama-terrain.site/api/gerant/n8n/rapport-hebdomadaire/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "2809a85c-b12f-4c18-81a3-e66c527a22a8",
+      "name": "Chiffres de la semaine (backend)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3264,
+        2928
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "rapports",
+        "options": {}
+      },
+      "id": "09dcc412-85ab-41d0-8986-6825936e5b11",
+      "name": "Un rapport par gérant",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        3504,
+        2928
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Rédige le rapport hebdomadaire de {{ $json.prenom }}, gérant des terrains : {{ $json.terrains.join(', ') }}.\n\nChiffres de la semaine écoulée :\n{{ JSON.stringify($json.semaine) }}\n\nChiffres de la semaine d'avant :\n{{ JSON.stringify($json.semaine_precedente) }}",
+        "options": {
+          "systemMessage": "Tu es l'assistant de Sama-Terrain, une plateforme de réservation de terrains de mini-foot au Sénégal. Tu rédiges un court rapport hebdomadaire pour un gérant, en français simple, sans markdown.\nRègles strictes :\n1. Utilise UNIQUEMENT les chiffres fournis. N'invente, n'estime et n'arrondis jamais un chiffre.\n2. Montants en FCFA, taux de remplissage en %.\n3. Compare la semaine écoulée à la semaine d'avant (hausse ou baisse des revenus, du remplissage, des annulations). Si la semaine d'avant vaut 0 ou null, ne donne pas de pourcentage d'évolution.\n4. Une valeur null s'écrit « donnée indisponible ».\n5. Si nombre_creneaux vaut 0, écris seulement un message court : pas encore assez d'activité cette semaine pour un rapport.\n6. Termine par UNE recommandation prudente, présentée comme une suggestion que le gérant reste libre de suivre.\n7. Signe « L'équipe Sama-Terrain »."
+        }
+      },
+      "id": "746248b0-44b9-4d6e-b18a-3428757b578d",
+      "name": "Agent IA - Rédiger le rapport",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        3744,
+        2928
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Un rapport par gérant').item.json.email }}",
+        "subject": "Votre rapport hebdomadaire - Sama-Terrain",
+        "emailType": "text",
+        "message": "={{ $json.output }}",
+        "options": {}
+      },
+      "id": "a5300d8d-a08d-414e-bf0f-b737ffba4e52",
+      "name": "Email - Rapport hebdomadaire",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        4032,
+        2928
+      ],
+      "webhookId": "ef829b36-3e23-4e8c-b9d4-9cc7b1287565",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "guYqKlF7xeaV23X1",
+          "name": "Gmail account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "id": "0bae6ca0-2174-4913-b75f-004c0e95ee3d",
+      "name": "Chaque jour 7h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        3024,
+        3424
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Signalements détectés aujourd'hui :\n{{ JSON.stringify($json.signalements) }}",
+        "options": {
+          "systemMessage": "Tu aides l'administrateur de Sama-Terrain (réservation de terrains de mini-foot au Sénégal). Tu reçois une liste d'activités inhabituelles détectées automatiquement. Rédige un email court en français, sans markdown :\n1. Liste chaque signalement : son type, les comptes concernés et le détail, sans rien ajouter ni inventer.\n2. Ne conclus jamais qu'il y a fraude et ne recommande aucune sanction : ce sont des cas à vérifier.\n3. Termine par : « Cette activité est inhabituelle. Une vérification est recommandée. »"
+        }
+      },
+      "id": "0aeec982-420a-4304-8e68-2a644767ee19",
+      "name": "Agent IA - Résumer pour l'admin",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        3984,
+        3424
+      ]
+    },
+    {
+      "parameters": {
+        "model": "nvidia/nemotron-3-super-120b-a12b:free",
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "afd95548-e046-4a88-bab1-f63963afe39c",
+      "name": "OpenRouter - Signalements",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        3984,
+        3648
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "oqnHqfHPzldB97Ty",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Activités inhabituelles (backend)').item.json.emails_admins.join(',') }}",
+        "subject": "Sama-Terrain : activités à vérifier",
+        "emailType": "text",
+        "message": "={{ $json.output }}",
+        "options": {}
+      },
+      "id": "c19f04bc-c5a1-4551-b827-6edc89197f0c",
+      "name": "Email - Signalements admin",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        4272,
+        3424
+      ],
+      "webhookId": "4570c475-fa39-4108-ba49-73a365a63a62",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "guYqKlF7xeaV23X1",
+          "name": "Gmail account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "2e46748e-1f78-4abc-86f9-a4dcf596e0ee",
+      "name": "Toutes les 30 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        3024,
+        3936
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.sama-terrain.site/api/paiements/n8n/rappels-reservations/",
+        "options": {}
+      },
+      "id": "63c09d65-5bea-4a7f-82be-d47972017599",
+      "name": "Déclencher les rappels de réservation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3264,
+        3936
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "8fd5561b-5832-4e26-a724-bd9f63a5cf3d",
+      "name": "Chaque jour 9h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        3024,
+        4176
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.sama-terrain.site/api/paiements/n8n/alertes-expiration-abonnement/",
+        "options": {}
+      },
+      "id": "a9f6df37-708c-41cf-87d7-dbab0ac1212a",
+      "name": "Déclencher les alertes d'expiration",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3264,
+        4176
+      ]
     },
     {
       "parameters": {
@@ -349,16 +592,16 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        -528,
-        1984
+        3536,
+        2288
       ],
-      "id": "03e10c86-a98a-481f-a4e5-7cec247cb538",
-      "name": "Email - Demande gérant rejetée",
+      "id": "2db9b79a-02e0-4ea8-ada4-9ad71ad461a5",
+      "name": "Email - Demande gérant rejetée1",
       "webhookId": "ece06071-f127-4ff5-a56f-4b2ab4d65fd5",
       "credentials": {
         "gmailOAuth2": {
-          "id": "CK6sxjNXVgI2Eb8a",
-          "name": "Gmail account"
+          "id": "guYqKlF7xeaV23X1",
+          "name": "Gmail account 3"
         }
       }
     },
@@ -373,15 +616,15 @@
       "type": "n8n-nodes-base.whatsApp",
       "typeVersion": 1.1,
       "position": [
-        -528,
-        1008
+        3536,
+        1200
       ],
-      "id": "52f12726-b71d-44e5-9eb2-ede373a842b5",
-      "name": "WhatsApp - Réservation confirmée",
+      "id": "085ebe19-86ec-4dcc-80e3-7a7b84670b43",
+      "name": "WhatsApp - Réservation confirmée1",
       "webhookId": "b979e3c4-04c3-4d51-a700-f28e26c52498",
       "credentials": {
         "whatsAppApi": {
-          "id": "tXmWBcKKloMIdmwH",
+          "id": "K82w4PvgMBGs9sps",
           "name": "WhatsApp account"
         }
       }
@@ -397,15 +640,15 @@
       "type": "n8n-nodes-base.whatsApp",
       "typeVersion": 1.1,
       "position": [
-        -528,
-        1472
+        3536,
+        1696
       ],
-      "id": "6a1b2c3d-4e5f-4071-8a9b-0c1d2e3f4a5b",
-      "name": "WhatsApp - Rappel réservation",
+      "id": "28dac05e-8ef6-4dbc-83bb-94f1da8acecd",
+      "name": "WhatsApp - Rappel réservation1",
       "webhookId": "c080f4d5-15d4-5e62-b811-f39f37d63509",
       "credentials": {
         "whatsAppApi": {
-          "id": "tXmWBcKKloMIdmwH",
+          "id": "K82w4PvgMBGs9sps",
           "name": "WhatsApp account"
         }
       }
@@ -421,16 +664,16 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        -528,
-        2176
+        3536,
+        2464
       ],
-      "id": "d4e5f6a7-b8c9-4071-8a9b-1c2d3e4f5a6b",
-      "name": "Email - Demande gérant validée",
+      "id": "18031caf-f455-4bd6-a605-674bad41350a",
+      "name": "Email - Demande gérant validée1",
       "webhookId": "ece06071-f127-4ff5-a56f-4b2ab4d65fd5",
       "credentials": {
         "gmailOAuth2": {
-          "id": "CK6sxjNXVgI2Eb8a",
-          "name": "Gmail account"
+          "id": "guYqKlF7xeaV23X1",
+          "name": "Gmail account 3"
         }
       }
     },
@@ -445,18 +688,90 @@
       "type": "n8n-nodes-base.whatsApp",
       "typeVersion": 1.1,
       "position": [
-        -528,
-        2368
+        3536,
+        2656
       ],
-      "id": "e5f6a7b8-c9d0-4071-8a9b-2d3e4f5a6b7c",
-      "name": "WhatsApp - Demande gérant validée",
+      "id": "d9222158-7966-4d96-9188-b0990a8c430c",
+      "name": "WhatsApp - Demande gérant validée1",
       "webhookId": "f191g5e6-26e5-6f73-c922-g40g48e74f0a",
       "credentials": {
         "whatsAppApi": {
-          "id": "tXmWBcKKloMIdmwH",
+          "id": "K82w4PvgMBGs9sps",
           "name": "WhatsApp account"
         }
       }
+    },
+    {
+      "parameters": {
+        "model": "nvidia/nemotron-3-super-120b-a12b:free",
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "097c0f19-3db1-4f6b-b2e9-747e4816a12c",
+      "name": "OpenRouter - Rapport",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        3744,
+        3152
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "oqnHqfHPzldB97Ty",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.sama-terrain.site/api/admin/n8n/signalements/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "a2ef16b2-3b24-459c-8364-a2750c1e3d3e",
+      "name": "Activités inhabituelles (backend)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -800,
+        3424
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "92198031-d8b7-416b-98cb-87b8be4a87b0",
+              "leftValue": "={{ $json.signalements }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "af9f2628-e1a3-4eda-b87d-1519c614bac3",
+      "name": "Y a-t-il des signalements ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -560,
+        3424
+      ]
     }
   ],
   "connections": {
@@ -480,7 +795,7 @@
             "index": 0
           },
           {
-            "node": "WhatsApp - Réservation confirmée",
+            "node": "WhatsApp - Réservation confirmée1",
             "type": "main",
             "index": 0
           }
@@ -506,7 +821,7 @@
             "index": 0
           },
           {
-            "node": "WhatsApp - Rappel réservation",
+            "node": "WhatsApp - Rappel réservation1",
             "type": "main",
             "index": 0
           }
@@ -520,19 +835,19 @@
         ],
         [
           {
-            "node": "Email - Demande gérant rejetée",
+            "node": "Email - Demande gérant rejetée1",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Email - Demande gérant validée",
+            "node": "Email - Demande gérant validée1",
             "type": "main",
             "index": 0
           },
           {
-            "node": "WhatsApp - Demande gérant validée",
+            "node": "WhatsApp - Demande gérant validée1",
             "type": "main",
             "index": 0
           }
@@ -594,7 +909,95 @@
         ]
       ]
     },
-    "Email - Demande gérant rejetée": {
+    "Chaque lundi 8h": {
+      "main": [
+        [
+          {
+            "node": "Chiffres de la semaine (backend)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chiffres de la semaine (backend)": {
+      "main": [
+        [
+          {
+            "node": "Un rapport par gérant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Un rapport par gérant": {
+      "main": [
+        [
+          {
+            "node": "Agent IA - Rédiger le rapport",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent IA - Rédiger le rapport": {
+      "main": [
+        [
+          {
+            "node": "Email - Rapport hebdomadaire",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent IA - Résumer pour l'admin": {
+      "main": [
+        [
+          {
+            "node": "Email - Signalements admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter - Signalements": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agent IA - Résumer pour l'admin",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Toutes les 30 min": {
+      "main": [
+        [
+          {
+            "node": "Déclencher les rappels de réservation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chaque jour 9h": {
+      "main": [
+        [
+          {
+            "node": "Déclencher les alertes d'expiration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email - Demande gérant rejetée1": {
       "main": [
         [
           {
@@ -605,7 +1008,7 @@
         ]
       ]
     },
-    "WhatsApp - Réservation confirmée": {
+    "WhatsApp - Réservation confirmée1": {
       "main": [
         [
           {
@@ -616,7 +1019,7 @@
         ]
       ]
     },
-    "WhatsApp - Rappel réservation": {
+    "WhatsApp - Rappel réservation1": {
       "main": [
         [
           {
@@ -627,7 +1030,7 @@
         ]
       ]
     },
-    "Email - Demande gérant validée": {
+    "Email - Demande gérant validée1": {
       "main": [
         [
           {
@@ -638,7 +1041,7 @@
         ]
       ]
     },
-    "WhatsApp - Demande gérant validée": {
+    "WhatsApp - Demande gérant validée1": {
       "main": [
         [
           {
@@ -647,12 +1050,57 @@
             "index": 0
           }
         ]
+      ]
+    },
+    "OpenRouter - Rapport": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agent IA - Rédiger le rapport",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chaque jour 7h": {
+      "main": [
+        [
+          {
+            "node": "Activités inhabituelles (backend)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Activités inhabituelles (backend)": {
+      "main": [
+        [
+          {
+            "node": "Y a-t-il des signalements ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Y a-t-il des signalements ?": {
+      "main": [
+        [
+          {
+            "node": "Agent IA - Résumer pour l'admin",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
       ]
     }
   },
   "pinData": {},
   "meta": {
     "templateCredsSetupCompleted": true,
-    "instanceId": "ae5284aaac185bbd8901fd961d2935271c8150aa58d2303fffb3aae893612de6"
+    "instanceId": "a410a7bb84de8a6cdd54e34ce3c8eb3a32b6129d080256e56bbb1d891c405bbf"
   }
 }

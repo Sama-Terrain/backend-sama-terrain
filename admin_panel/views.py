@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.db import connection
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from rest_framework import status
@@ -11,6 +12,7 @@ from avis.models import Avis
 from avis.utils import recalculer_note_terrain
 from creneaux.models import Creneau
 from gerant.models import DemandeGerant
+from gerant.permissions import EstN8n
 from paiements.models import Abonnement, Paiement
 from paiements.n8n import notifier_n8n
 from reservations.models import Reservation
@@ -712,3 +714,66 @@ class ValiderAvisView(APIView):
         recalculer_note_terrain(avis.terrain)
 
         return Response({'message': "Avis conservé."})
+
+
+# Activités inhabituelles à faire vérifier par l'admin (lecture seule).
+# Requête PostgreSQL : une ligne = un cas (type, comptes concernés, détail).
+SQL_SIGNALEMENTS = """
+SELECT 'Annulations répétées' AS type,
+       u.email AS comptes,
+       COUNT(*) FILTER (WHERE r.statut = 'annulee') || ' annulation(s) sur ' || COUNT(*) || ' réservation(s) en 30 jours' AS detail
+FROM reservations_reservation r
+JOIN authentification_user u ON u.id = r.amateur_id
+WHERE r.cree_le >= NOW() - INTERVAL '30 days'
+GROUP BY u.email
+HAVING COUNT(*) FILTER (WHERE r.statut = 'annulee') >= 3
+   AND COUNT(*) FILTER (WHERE r.statut = 'annulee') >= COUNT(*) * 0.5
+
+UNION ALL
+
+SELECT 'Même numéro sur plusieurs comptes',
+       STRING_AGG(email, ', '),
+       'Numéro ' || telephone || ' utilisé par ' || COUNT(*) || ' comptes'
+FROM authentification_user
+WHERE telephone <> ''
+GROUP BY telephone
+HAVING COUNT(*) >= 2
+
+UNION ALL
+
+SELECT 'Réservation confirmée sans paiement',
+       u.email,
+       'Réservation n°' || r.id || ' confirmée sans avance enregistrée'
+FROM reservations_reservation r
+JOIN authentification_user u ON u.id = r.amateur_id
+WHERE r.statut = 'confirmee'
+  AND NOT EXISTS (
+    SELECT 1 FROM paiements_paiement p
+    WHERE p.reservation_id = r.id AND p.type = 'avance'
+  )
+"""
+
+
+class SignalementsN8nView(APIView):
+    """
+    GET /api/admin/n8n/signalements/
+
+    Appelée chaque jour par N8n (en-tête X-N8N-Token obligatoire). Renvoie
+    les activités inhabituelles et les emails des admins à prévenir. L'agent
+    IA de N8n les résume par email : aucun compte n'est bloqué, c'est
+    l'admin qui vérifie et décide.
+    """
+
+    permission_classes = [EstN8n]
+    # Pas de JWT ici : l'accès est contrôlé par le jeton N8n uniquement.
+    authentication_classes = []
+
+    def get(self, request):
+        with connection.cursor() as curseur:
+            curseur.execute(SQL_SIGNALEMENTS)
+            colonnes = [colonne[0] for colonne in curseur.description]
+            signalements = [dict(zip(colonnes, ligne)) for ligne in curseur.fetchall()]
+
+        emails_admins = User.objects.filter(role='admin', is_active=True).values_list('email', flat=True)
+
+        return Response({'signalements': signalements, 'emails_admins': list(emails_admins)})
