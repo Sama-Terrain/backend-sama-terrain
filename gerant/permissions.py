@@ -1,4 +1,7 @@
-from rest_framework.permissions import IsAuthenticated
+import hmac
+
+from django.conf import settings
+from rest_framework.permissions import BasePermission, IsAuthenticated
 
 from paiements.models import Abonnement
 
@@ -34,3 +37,16 @@ class EstGerantAbonnementActif(EstGerant):
         # le _ veut dire qu'on ne se soucie pas de la valeur retournée par get_or_create() (True si créé, False si existait déjà) : on veut juste l'objet Abonnement.
         abonnement, _ = Abonnement.objects.get_or_create(gerant=request.user)
         return abonnement.est_actif
+
+
+class EstN8n(BasePermission):
+    """
+    Appel serveur à serveur depuis N8n : autorisé seulement si l'en-tête
+    X-N8N-Token correspond au jeton N8N_API_TOKEN configuré. Si aucun jeton
+    n'est configuré, tout accès est refusé (jamais ouvert par défaut).
+    """
+
+    def has_permission(self, request, view):
+        jeton_attendu = settings.N8N_API_TOKEN
+        jeton_recu = request.headers.get('X-N8N-Token', '')
+        return bool(jeton_attendu) and hmac.compare_digest(jeton_recu, jeton_attendu)

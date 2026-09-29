@@ -78,6 +78,10 @@ PAYTECH_BASE_URL = config('PAYTECH_BASE_URL', default='https://paytech.sn/api')
 # --- N8n (envoi des notifications email / WhatsApp) ---
 N8N_WEBHOOK_URL = config('N8N_WEBHOOK_URL', default='')
 
+# Jeton partagé que N8n envoie dans l'en-tête X-N8N-Token pour lire des
+# données sensibles (ex: rapport hebdomadaire des gérants). Vide = accès refusé.
+N8N_API_TOKEN = config('N8N_API_TOKEN', default='')
+
 # --- Service IA (prédictions/recommandations, appelé en HTTP) ---
 IA_SERVICE_URL = config('IA_SERVICE_URL', default='http://127.0.0.1:8001')
 

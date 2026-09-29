@@ -135,6 +135,7 @@ Toutes les variables attendues sont listées dans `.env.example`. Résumé de le
 | `IDCLIENT` / `IDCLIENTGOOGLESCRET` | Identifiant et secret client Google OAuth2 (bouton "Sign in with Google") |
 | `PAYTECH_API_KEY` / `PAYTECH_API_SECRET` / `PAYTECH_BASE_URL` | Identifiants de l'agrégateur de paiement PayTech (Wave/Orange Money) |
 | `N8N_WEBHOOK_URL` | URL du webhook N8n qui déclenche les notifications automatiques |
+| `N8N_API_TOKEN` | Jeton partagé que N8n envoie dans l'en-tête `X-N8N-Token` pour lire le rapport hebdomadaire des gérants et les signalements admin. Vide = endpoints fermés |
 | `IA_SERVICE_URL` | URL du micro-service IA (FastAPI) — `http://ia:8001` dans Docker, `http://127.0.0.1:8001` en local |
 | `FRONTEND_URL` / `BACKEND_URL` | Utilisées pour construire des liens absolus (emails, redirections PayTech) |
 
@@ -173,6 +174,18 @@ Quelques règles qui ne sont pas évidentes en lisant juste les modèles :
 - **Un gérant avec un abonnement expiré** ne peut plus créer/modifier de terrains ni de créneaux, ni accéder à son dashboard — mais peut toujours consulter/payer sa page d'abonnement, pour ne jamais rester bloqué hors de la plateforme.
 - **L'IA ne stocke rien elle-même** : ses résultats (`niveau_demande`, `prix_recommande_ia`) sont écrits directement sur les lignes `Creneau` concernées par le micro-service FastAPI, calculés à partir de vraies statistiques de réservation (jamais de valeurs inventées).
 - **Un admin ne peut ni se suspendre ni se supprimer lui-même**, et un compte admin ne peut pas être supprimé depuis la page de gestion des utilisateurs (garde-fous côté `admin_panel`).
+
+## Rapport hebdomadaire des gérants (N8n + agent IA)
+
+La rédaction du rapport est confiée à un agent IA dans N8n ; le backend fournit uniquement les chiffres réels :
+
+`GET /api/gerant/n8n/rapport-hebdomadaire/` (en-tête `X-N8N-Token: <N8N_API_TOKEN>`) renvoie, pour chaque gérant à l'abonnement actif, les chiffres de la semaine écoulée (`semaine`) et de la semaine d'avant (`semaine_precedente`) : revenus, nombre de créneaux, taux de remplissage, réservations confirmées, annulations (y compris réservations expirées faute de paiement) et heure la plus rentable. Une valeur non calculable vaut `null`.
+
+Workflow N8n suggéré : *Schedule Trigger* (lundi matin) → *HTTP Request* vers cet endpoint → *Split Out* sur `rapports` → *AI Agent* → *Gmail*. Consigne à donner à l'agent : n'utiliser que les chiffres reçus, comparer `semaine` et `semaine_precedente` pour les évolutions, écrire « donnée indisponible » pour un `null`, et, si `nombre_creneaux` vaut 0, envoyer un message court expliquant qu'il n'y a pas encore assez d'activité pour un rapport.
+
+## Signalements pour l'administrateur (N8n + agent IA)
+
+`GET /api/admin/n8n/signalements/` (même en-tête `X-N8N-Token`) exécute en lecture seule trois requêtes SQL et renvoie les cas à vérifier : annulations répétées, même numéro de téléphone sur plusieurs comptes, réservation confirmée sans paiement enregistré. La réponse contient aussi `emails_admins`. N8n l'appelle chaque jour ; s'il y a des signalements, un agent IA les résume dans un email aux admins. Aucun compte n'est bloqué automatiquement : l'admin vérifie et décide.
 
 ## Commandes utiles
 
