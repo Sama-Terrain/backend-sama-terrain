@@ -8,13 +8,25 @@ from .models import Creneau
 class CreneauSerializer(serializers.ModelSerializer):
     """Utilisé pour afficher un créneau (liste et détail)."""
 
+    # "Terrain complet", "Portion 2"... (vide pour un terrain simple).
+    libelle_portion = serializers.CharField(read_only=True)
+
+    # Disponibilité RÉELLE, portions comprises : le terrain complet peut être
+    # "disponible" en base mais non réservable si une portion est déjà prise.
+    # C'est ce champ que le frontend doit utiliser pour l'affichage.
+    disponible = serializers.SerializerMethodField()
+
     class Meta:
         model = Creneau
         fields = [
             'id', 'terrain', 'date', 'heure_debut', 'heure_fin',
             'prix', 'prix_recommande_ia', 'statut',
+            'portion', 'libelle_portion', 'disponible',
         ]
-        read_only_fields = ['statut', 'prix_recommande_ia']
+        read_only_fields = ['statut', 'prix_recommande_ia', 'portion']
+
+    def get_disponible(self, creneau):
+        return creneau.est_reservable()
 
 
 class CreneauCreateSerializer(serializers.ModelSerializer):
@@ -36,6 +48,13 @@ class CreneauCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Ce terrain ne vous appartient pas.")
         return terrain
 
+    def create(self, validated_data):
+        # Le gérant crée le créneau du terrain complet ; pour un terrain
+        # divisible, les créneaux des portions sont créés automatiquement.
+        creneau = super().create(validated_data)
+        creneau.creer_ou_mettre_a_jour_portions()
+        return creneau
+
 
 class CreneauUpdateSerializer(serializers.ModelSerializer):
     """Utilisé pour PATCH /api/creneaux/:id/ (on ne change pas le terrain)."""
@@ -43,3 +62,24 @@ class CreneauUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Creneau
         fields = ['date', 'heure_debut', 'heure_fin', 'prix']
+
+    def validate(self, data):
+        # Sur un terrain divisible, les portions sont rattachées au terrain
+        # complet par leur date et leur heure : déplacer un seul de ces
+        # créneaux casserait ce lien.
+        creneau = self.instance
+        change_horaire = (
+            data.get('date', creneau.date) != creneau.date
+            or data.get('heure_debut', creneau.heure_debut) != creneau.heure_debut
+        )
+        if change_horaire and creneau.terrain.nombre_portions > 1:
+            raise serializers.ValidationError(
+                "Sur un terrain divisible, supprimez ce créneau et recréez-le à la nouvelle date ou heure."
+            )
+        return data
+
+    def update(self, instance, validated_data):
+        # Si le prix du terrain complet change, celui des portions libres suit.
+        creneau = super().update(instance, validated_data)
+        creneau.creer_ou_mettre_a_jour_portions()
+        return creneau

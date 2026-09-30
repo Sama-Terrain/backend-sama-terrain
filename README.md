@@ -175,6 +175,25 @@ Quelques règles qui ne sont pas évidentes en lisant juste les modèles :
 - **L'IA ne stocke rien elle-même** : ses résultats (`niveau_demande`, `prix_recommande_ia`) sont écrits directement sur les lignes `Creneau` concernées par le micro-service FastAPI, calculés à partir de vraies statistiques de réservation (jamais de valeurs inventées).
 - **Un admin ne peut ni se suspendre ni se supprimer lui-même**, et un compte admin ne peut pas être supprimé depuis la page de gestion des utilisateurs (garde-fous côté `admin_panel`).
 
+## Terrains divisibles en portions
+
+Certains grands terrains peuvent être découpés en portions louées séparément (ex: 3 petits matchs en même temps).
+
+**Données** (aucune nouvelle table) :
+- `Terrain.nombre_portions` : 1 = terrain simple (valeur de tous les anciens terrains), 2 à 6 = terrain divisible.
+- `Creneau.portion` : 0 = terrain complet (valeur de tous les anciens créneaux), 1, 2, 3... = une portion. Chaque portion est un créneau normal (son prix, son statut, ses réservations, son ticket QR).
+
+**Prix** : le gérant fixe le prix du terrain complet comme avant (par créneau), et le prix d'une portion sur la fiche du terrain (`Terrain.prix_portion`, ex: terrain complet 60 000 FCFA, chaque portion 30 000 FCFA). Ce prix est obligatoire pour un terrain divisible et doit dépasser 10 000 FCFA, l'avance minimum demandée aux joueurs.
+
+**Création des créneaux** : le gérant crée ses créneaux comme avant (terrain complet). Pour un terrain divisible, le backend crée automatiquement un créneau par portion à la même heure, au prix d'une portion. Changer le nombre ou le prix des portions adapte les créneaux à venir encore libres (les créneaux déjà réservés ne changent jamais).
+
+**Règle de disponibilité** (`Creneau.creneaux_en_conflit()` et `Creneau.est_reservable()`), pour un même terrain, une même date et une même heure :
+- une portion réservée ne bloque que le terrain complet : les autres portions restent réservables ;
+- le terrain complet n'est réservable que si toutes ses portions sont libres ;
+- le terrain complet réservé bloque toutes les portions.
+
+**Doubles réservations** : la création d'une réservation (`reservations/utils.py → bloquer_creneau`) verrouille en base les créneaux de cette heure (`select_for_update`) puis revérifie la disponibilité. Si deux joueurs réservent au même moment, le second attend la fin de la première réservation puis reçoit un refus. Cette protection s'applique aussi aux terrains simples.
+
 ## Rapport hebdomadaire des gérants (N8n + agent IA)
 
 La rédaction du rapport est confiée à un agent IA dans N8n ; le backend fournit uniquement les chiffres réels :

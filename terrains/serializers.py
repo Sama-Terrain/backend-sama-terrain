@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from paiements.models import Paiement
 from reservations.models import Reservation
+from reservations.serializers import MONTANT_AVANCE_MINIMUM
 
 from .models import Terrain, TerrainPhoto
 
@@ -37,7 +38,7 @@ class TerrainListSerializer(serializers.ModelSerializer):
             'id', 'nom', 'ville', 'adresse', 'type', 'surface',
             'prix_heure', 'avance', 'note_moyenne', 'nombre_avis',
             'actif', 'equipements', 'description', 'image',
-            'heure_ouverture', 'heure_fermeture',
+            'heure_ouverture', 'heure_fermeture', 'nombre_portions', 'prix_portion',
             'reservations_mois', 'revenus_mois', 'taux_occupation',
         ]
 
@@ -115,7 +116,7 @@ class TerrainCreateUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'nom', 'type', 'ville', 'adresse', 'capacite', 'surface',
             'prix_heure', 'avance', 'heure_ouverture', 'heure_fermeture',
-            'equipements', 'description',
+            'equipements', 'description', 'nombre_portions', 'prix_portion',
         ]
         # NB : "actif" n'est pas modifiable ici volontairement (pas de route
         # prévue pour ça dans la spec). Un nouveau terrain est actif par
@@ -163,6 +164,24 @@ class TerrainCreateUpdateSerializer(serializers.ModelSerializer):
                         f"La capacité renseignée n'est pas compatible avec le type "
                         f"\"{type_terrain}\" (maximum {capacite_max} joueurs)."
                     )
+                })
+
+        # Un terrain divisible doit avoir un prix de portion. Ce prix doit
+        # dépasser l'avance minimum (10 000 FCFA), sinon aucun joueur ne
+        # pourrait réserver une portion (l'avance doit rester inférieure au prix).
+        nombre_portions = data.get('nombre_portions', getattr(self.instance, 'nombre_portions', 1))
+        prix_portion = data.get('prix_portion', getattr(self.instance, 'prix_portion', None))
+        if nombre_portions > 1:
+            if not prix_portion:
+                raise serializers.ValidationError({
+                    'prix_portion': "Indiquez le prix d'une portion pour un terrain divisible.",
+                })
+            if prix_portion <= MONTANT_AVANCE_MINIMUM:
+                raise serializers.ValidationError({
+                    'prix_portion': (
+                        f"Le prix d'une portion doit dépasser {MONTANT_AVANCE_MINIMUM:,} FCFA "
+                        "(avance minimum demandée aux joueurs)."
+                    ).replace(',', ' '),
                 })
 
         heure_ouverture = data.get('heure_ouverture', getattr(self.instance, 'heure_ouverture', None))

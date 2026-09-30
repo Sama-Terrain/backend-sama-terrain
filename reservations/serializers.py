@@ -1,9 +1,11 @@
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
 from creneaux.models import Creneau
 
 from .models import Commande, Reservation
+from .utils import MESSAGE_CRENEAU_PRIS, bloquer_creneau
 
 
 class ReservationSerializer(serializers.ModelSerializer):
@@ -21,6 +23,8 @@ class ReservationSerializer(serializers.ModelSerializer):
     date = serializers.DateField(source='creneau.date', read_only=True)
     heure_debut = serializers.TimeField(source='creneau.heure_debut', read_only=True)
     heure_fin = serializers.TimeField(source='creneau.heure_fin', read_only=True)
+    # "Portion 2", "Terrain complet", ou vide pour un terrain simple.
+    libelle_portion = serializers.CharField(source='creneau.libelle_portion', read_only=True)
     reste_a_payer = serializers.IntegerField(read_only=True)
     ticket = serializers.SerializerMethodField()
 
@@ -31,7 +35,7 @@ class ReservationSerializer(serializers.ModelSerializer):
             'montant_avance', 'montant_total', 'reste_a_payer',
             'moyen_paiement', 'transaction_id', 'cree_le',
             'terrain_id', 'terrain_nom', 'terrain_image', 'date', 'heure_debut', 'heure_fin',
-            'ticket',
+            'libelle_portion', 'ticket',
         ]
 
     def get_terrain_image(self, reservation):
@@ -73,8 +77,10 @@ class ReservationCreateSerializer(serializers.ModelSerializer):
         fields = ['creneau', 'nom_complet', 'telephone', 'montant_avance']
 
     def validate_creneau(self, creneau):
-        if creneau.statut != Creneau.Statut.DISPONIBLE:
-            raise serializers.ValidationError("Ce créneau n'est plus disponible.")
+        # est_reservable() tient compte des portions : une portion est refusée
+        # si le terrain complet est pris, et inversement (voir Creneau).
+        if not creneau.est_reservable():
+            raise serializers.ValidationError(MESSAGE_CRENEAU_PRIS)
 
         #make_aware() est utilisé pour convertir un objet datetime naïf (sans information de fuseau horaire) 
         # en un objet datetime conscient (avec information de fuseau horaire). Cela est nécessaire car Django utilise des objets datetime conscients pour gérer les dates et heures.
@@ -108,18 +114,21 @@ class ReservationCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         creneau = validated_data['creneau']
 
-        # On crée la réservation avec le statut "en_attente" : le paiement de l'avance n'a pas encore été confirmé par PayTech.
-        # Le reste (montant total, statut...) est déduit côté serveur.
-        reservation = Reservation.objects.create(
-            amateur=self.context['request'].user,
-            montant_total=creneau.prix,
-            **validated_data,
-        )
+        # Tout se fait dans une transaction : si le créneau a été pris entre
+        # temps, bloquer_creneau() lève une erreur et rien n'est enregistré.
+        with transaction.atomic():
+            # On bloque le créneau (après une dernière vérification sous
+            # verrou) pour que personne d'autre ne puisse le réserver pendant
+            # que le paiement est en cours.
+            bloquer_creneau(creneau)
 
-        # On bloque immédiatement le créneau pour que personne d'autre
-        # ne puisse le réserver pendant que le paiement est en cours.
-        creneau.statut = Creneau.Statut.EN_ATTENTE
-        creneau.save()
+            # La réservation est créée "en_attente" : le paiement de l'avance
+            # n'a pas encore été confirmé par PayTech.
+            reservation = Reservation.objects.create(
+                amateur=self.context['request'].user,
+                montant_total=creneau.prix,
+                **validated_data,
+            )
 
         return reservation
 
@@ -148,9 +157,18 @@ class ReservationGroupeCreateSerializer(serializers.Serializer):
         if len({c.terrain_id for c in creneaux}) > 1:
             raise serializers.ValidationError("Tous les créneaux doivent appartenir au même terrain.")
 
+        # On ne peut pas prendre, dans une même commande, le terrain complet
+        # ET une de ses portions à la même heure : ils occupent la même surface.
+        ids_choisis = {c.id for c in creneaux}
+        for creneau in creneaux:
+            if creneau.creneaux_en_conflit().filter(id__in=ids_choisis).exists():
+                raise serializers.ValidationError(
+                    "Vous ne pouvez pas réserver le terrain complet et une de ses portions à la même heure."
+                )
+
         maintenant = timezone.now()
         for creneau in creneaux:
-            if creneau.statut != Creneau.Statut.DISPONIBLE:
+            if not creneau.est_reservable():
                 raise serializers.ValidationError(f"Le créneau {creneau} n'est plus disponible.")
             debut = timezone.make_aware(timezone.datetime.combine(creneau.date, creneau.heure_debut))
             if debut <= maintenant:
@@ -178,31 +196,33 @@ class ReservationGroupeCreateSerializer(serializers.Serializer):
         prix_total = sum(c.prix for c in creneaux)
         avance_totale = validated_data['montant_avance']
 
-        commande = Commande.objects.create(amateur=self.context['request'].user)
+        # Tout ou rien : si un seul créneau a été pris entre temps, aucune
+        # réservation de la commande n'est enregistrée (la transaction est annulée).
+        with transaction.atomic():
+            commande = Commande.objects.create(amateur=self.context['request'].user)
 
-        # Répartition de l'avance au prorata du prix de chaque créneau, en
-        # ajustant le dernier créneau pour que la somme retombe exactement
-        # sur le montant saisi (les arrondis peuvent perdre 1 ou 2 FCFA).
-        reservations = []
-        avance_distribuee = 0
-        for index, creneau in enumerate(creneaux):
-            if index == len(creneaux) - 1:
-                avance_creneau = avance_totale - avance_distribuee
-            else:
-                avance_creneau = round(avance_totale * creneau.prix / prix_total)
-                avance_distribuee += avance_creneau
+            # Répartition de l'avance au prorata du prix de chaque créneau, en
+            # ajustant le dernier créneau pour que la somme retombe exactement
+            # sur le montant saisi (les arrondis peuvent perdre 1 ou 2 FCFA).
+            reservations = []
+            avance_distribuee = 0
+            for index, creneau in enumerate(creneaux):
+                if index == len(creneaux) - 1:
+                    avance_creneau = avance_totale - avance_distribuee
+                else:
+                    avance_creneau = round(avance_totale * creneau.prix / prix_total)
+                    avance_distribuee += avance_creneau
 
-            reservation = Reservation.objects.create(
-                amateur=self.context['request'].user,
-                groupe=commande,
-                creneau=creneau,
-                nom_complet=validated_data['nom_complet'],
-                telephone=validated_data['telephone'],
-                montant_avance=avance_creneau,
-                montant_total=creneau.prix,
-            )
-            creneau.statut = Creneau.Statut.EN_ATTENTE
-            creneau.save()
-            reservations.append(reservation)
+                bloquer_creneau(creneau)
+                reservation = Reservation.objects.create(
+                    amateur=self.context['request'].user,
+                    groupe=commande,
+                    creneau=creneau,
+                    nom_complet=validated_data['nom_complet'],
+                    telephone=validated_data['telephone'],
+                    montant_avance=avance_creneau,
+                    montant_total=creneau.prix,
+                )
+                reservations.append(reservation)
 
         return commande, reservations

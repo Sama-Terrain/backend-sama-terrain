@@ -23,6 +23,8 @@ class TicketSerializer(serializers.ModelSerializer):
     client = serializers.CharField(source='reservation.nom_complet', read_only=True)
     telephone = serializers.CharField(source='reservation.telephone', read_only=True)
     terrain = serializers.CharField(source='reservation.creneau.terrain.nom', read_only=True)
+    # Pour un terrain divisible, le gérant doit savoir quelle partie est louée.
+    libelle_portion = serializers.CharField(source='reservation.creneau.libelle_portion', read_only=True)
     date = serializers.DateField(source='reservation.creneau.date', read_only=True)
     heure_debut = serializers.TimeField(source='reservation.creneau.heure_debut', read_only=True)
     heure_fin = serializers.TimeField(source='reservation.creneau.heure_fin', read_only=True)
@@ -32,7 +34,7 @@ class TicketSerializer(serializers.ModelSerializer):
         model = Ticket
         fields = [
             'id', 'code', 'utilise', 'utilise_le', 'cree_le', 'reservation',
-            'client', 'telephone', 'terrain', 'date', 'heure_debut', 'heure_fin',
+            'client', 'telephone', 'terrain', 'libelle_portion', 'date', 'heure_debut', 'heure_fin',
             'montant_restant',
         ]
 
