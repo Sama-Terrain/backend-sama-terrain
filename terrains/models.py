@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 
@@ -51,6 +52,23 @@ class Terrain(models.Model):
     # Prix affiché au public, et montant de l'avance à payer pour réserver.
     prix_heure = models.PositiveIntegerField(help_text="Prix en FCFA par heure")
     avance = models.PositiveIntegerField(default=5000, help_text="Avance à payer en FCFA")
+
+    # Un grand terrain peut être découpé en portions louées séparément
+    # (ex: 3 petits matchs en même temps au lieu d'un grand).
+    # 1 = terrain simple, non divisible (valeur de tous les anciens terrains).
+    # 3 = on peut louer le terrain complet OU chacune de ses 3 portions.
+    nombre_portions = models.PositiveSmallIntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(6)],
+        help_text="1 = terrain simple ; 2 à 6 = terrain divisible en autant de portions",
+    )
+
+    # Prix d'UNE portion pour une heure, choisi par le gérant (ex: terrain
+    # complet 60 000 FCFA, chaque portion 30 000 FCFA). Obligatoire pour un
+    # terrain divisible, inutilisé pour un terrain simple.
+    prix_portion = models.PositiveIntegerField(
+        null=True, blank=True, help_text="Prix d'une portion en FCFA par heure (terrain divisible)",
+    )
 
     heure_ouverture = models.TimeField(default='08:00')
     heure_fermeture = models.TimeField(default='23:00')

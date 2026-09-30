@@ -114,6 +114,16 @@ class CreneauDetailView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Supprimer le terrain complet d'un terrain divisible supprime aussi
+        # ses portions (même heure) : elles ne doivent donc pas être réservées.
+        portions = creneau.creneaux_en_conflit() if creneau.portion == 0 else Creneau.objects.none()
+        if portions.exclude(statut=Creneau.Statut.DISPONIBLE).exists():
+            return Response(
+                {'detail': "Impossible de supprimer ce créneau : une de ses portions est déjà réservée."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        portions.delete()
         creneau.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 

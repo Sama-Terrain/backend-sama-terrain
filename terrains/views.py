@@ -3,7 +3,7 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from creneaux.models import Creneau
+from creneaux.models import Creneau, adapter_portions_futures
 
 from .models import Terrain, TerrainPhoto
 from .permissions import EstGerantOuLectureSeule, EstProprietaireDuTerrain
@@ -118,7 +118,13 @@ class TerrainDetailView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+        anciennes_portions = (terrain.nombre_portions, terrain.prix_portion)
         terrain = serializer.save()
+
+        # Le gérant a rendu le terrain divisible, ou changé le nombre ou le
+        # prix des portions : on adapte ses créneaux à venir encore libres.
+        if (terrain.nombre_portions, terrain.prix_portion) != anciennes_portions:
+            adapter_portions_futures(terrain)
 
         # "actif" est géré à la main plutôt que via le serializer : avec des
         # données multipart/form-data, un BooleanField DRF absent du formulaire
