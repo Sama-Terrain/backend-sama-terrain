@@ -35,7 +35,7 @@ class TerrainListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Terrain
         fields = [
-            'id', 'nom', 'ville', 'adresse', 'type', 'surface',
+            'id', 'nom', 'ville', 'adresse', 'latitude', 'longitude', 'type', 'surface',
             'prix_heure', 'avance', 'note_moyenne', 'nombre_avis',
             'actif', 'equipements', 'description', 'image',
             'heure_ouverture', 'heure_fermeture', 'nombre_portions', 'prix_portion',
@@ -114,7 +114,7 @@ class TerrainCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Terrain
         fields = [
-            'nom', 'type', 'ville', 'adresse', 'capacite', 'surface',
+            'nom', 'type', 'ville', 'adresse', 'latitude', 'longitude', 'capacite', 'surface',
             'prix_heure', 'avance', 'heure_ouverture', 'heure_fermeture',
             'equipements', 'description', 'nombre_portions', 'prix_portion',
         ]
@@ -183,6 +183,19 @@ class TerrainCreateUpdateSerializer(serializers.ModelSerializer):
                         "(avance minimum demandée aux joueurs)."
                     ).replace(',', ' '),
                 })
+
+        # Position GPS : les deux coordonnées vont ensemble (une latitude
+        # seule ne permet pas de placer le terrain sur une carte).
+        latitude = data.get('latitude', getattr(self.instance, 'latitude', None))
+        longitude = data.get('longitude', getattr(self.instance, 'longitude', None))
+        if (latitude is None) != (longitude is None):
+            raise serializers.ValidationError({
+                'latitude': "Renseignez la latitude ET la longitude, ou aucune des deux.",
+            })
+        if latitude is not None and not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+            raise serializers.ValidationError({
+                'latitude': "Coordonnées GPS invalides (latitude entre -90 et 90, longitude entre -180 et 180).",
+            })
 
         heure_ouverture = data.get('heure_ouverture', getattr(self.instance, 'heure_ouverture', None))
         heure_fermeture = data.get('heure_fermeture', getattr(self.instance, 'heure_fermeture', None))
