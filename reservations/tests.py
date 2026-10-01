@@ -159,7 +159,8 @@ class PrixPortionTests(TestCase):
 
     def _creer(self, **champs):
         donnees = {
-            'nom': 'Terrain', 'type': 'Foot à 5', 'ville': 'Dakar', 'adresse': 'x',
+            'nom': 'Terrain', 'type': 'Foot à 5', 'ville': 'Dakar',
+            'latitude': '14.764500', 'longitude': '-17.439800',
             'capacite': 10, 'surface': 'Synthétique', 'prix_heure': 60000, **champs,
         }
         return self.client.post('/api/terrains/', donnees)

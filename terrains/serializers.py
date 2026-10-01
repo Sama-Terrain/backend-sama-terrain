@@ -114,7 +114,7 @@ class TerrainCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Terrain
         fields = [
-            'nom', 'type', 'ville', 'adresse', 'latitude', 'longitude', 'capacite', 'surface',
+            'nom', 'type', 'ville', 'latitude', 'longitude', 'capacite', 'surface',
             'prix_heure', 'avance', 'heure_ouverture', 'heure_fermeture',
             'equipements', 'description', 'nombre_portions', 'prix_portion',
         ]
@@ -137,11 +137,6 @@ class TerrainCreateUpdateSerializer(serializers.ModelSerializer):
     def validate_nom(self, value):
         if not value.strip():
             raise serializers.ValidationError("Le nom du terrain est obligatoire.")
-        return value.strip()
-
-    def validate_adresse(self, value):
-        if not value.strip():
-            raise serializers.ValidationError("L'adresse est obligatoire.")
         return value.strip()
 
     def validate_prix_heure(self, value):
@@ -184,15 +179,16 @@ class TerrainCreateUpdateSerializer(serializers.ModelSerializer):
                     ).replace(',', ' '),
                 })
 
-        # Position GPS : les deux coordonnées vont ensemble (une latitude
-        # seule ne permet pas de placer le terrain sur une carte).
+        # Position GPS obligatoire : c'est elle qui permet au joueur de
+        # trouver le terrain (elle remplace l'adresse écrite). Les deux
+        # coordonnées vont ensemble : une latitude seule ne place rien.
         latitude = data.get('latitude', getattr(self.instance, 'latitude', None))
         longitude = data.get('longitude', getattr(self.instance, 'longitude', None))
-        if (latitude is None) != (longitude is None):
+        if latitude is None or longitude is None:
             raise serializers.ValidationError({
-                'latitude': "Renseignez la latitude ET la longitude, ou aucune des deux.",
+                'latitude': "Indiquez la position du terrain : cliquez sur la carte ou utilisez votre position.",
             })
-        if latitude is not None and not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+        if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
             raise serializers.ValidationError({
                 'latitude': "Coordonnées GPS invalides (latitude entre -90 et 90, longitude entre -180 et 180).",
             })

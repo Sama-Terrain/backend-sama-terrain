@@ -11,7 +11,7 @@ from terrains.models import Terrain
 
 
 class PositionGpsTerrainTests(TestCase):
-    """Position GPS facultative d'un terrain (latitude + longitude)."""
+    """Position GPS obligatoire d'un terrain (latitude + longitude)."""
 
     def setUp(self):
         self.gerant = User.objects.create(
@@ -27,7 +27,7 @@ class PositionGpsTerrainTests(TestCase):
     def _creer(self, **champs):
         # Même format que le formulaire du frontend (multipart/form-data).
         donnees = {
-            'nom': 'Terrain', 'type': 'Foot à 5', 'ville': 'Parcelles Assainies', 'adresse': 'Unité 15',
+            'nom': 'Terrain', 'type': 'Foot à 5', 'ville': 'Parcelles Assainies',
             'capacite': 10, 'surface': 'Synthétique', 'prix_heure': 30000, **champs,
         }
         return self.client.post('/api/terrains/', donnees, format='multipart')
@@ -39,11 +39,17 @@ class PositionGpsTerrainTests(TestCase):
         self.assertEqual(terrain.latitude, Decimal('14.764500'))
         self.assertEqual(terrain.longitude, Decimal('-17.439800'))
 
-    def test_terrain_sans_position_gps_reste_possible(self):
-        # Les champs vides envoyés par le formulaire sont enregistrés comme "aucune position".
+    def test_terrain_sans_position_gps_refuse(self):
+        # Champs vides envoyés par le formulaire : le message s'affiche sous la carte.
         reponse = self._creer(latitude='', longitude='')
-        self.assertEqual(reponse.status_code, 201)
-        self.assertIsNone(Terrain.objects.get().latitude)
+        self.assertEqual(reponse.status_code, 400)
+        self.assertIn('latitude', reponse.data)
+        self.assertFalse(Terrain.objects.exists())
+
+    def test_terrain_sans_adresse_accepte(self):
+        # L'adresse écrite n'est plus demandée : la position GPS suffit.
+        self.assertEqual(self._creer(latitude='14.764500', longitude='-17.439800').status_code, 201)
+        self.assertEqual(Terrain.objects.get().adresse, '')
 
     def test_latitude_sans_longitude_refusee(self):
         self.assertEqual(self._creer(latitude='14.7645', longitude='').status_code, 400)
