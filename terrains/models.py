@@ -45,11 +45,15 @@ class Terrain(models.Model):
     nom = models.CharField(max_length=150)
     type = models.CharField(max_length=20, choices=TYPES)
     ville = models.CharField(max_length=100)
-    adresse = models.CharField(max_length=255)
+    # Ancienne adresse écrite : n'est plus demandée au gérant (remplacée par
+    # la position GPS), conservée pour les terrains créés avant.
+    adresse = models.CharField(max_length=255, blank=True, default='')
 
-    # Position GPS exacte du terrain (facultative). L'adresse écrite est
-    # souvent imprécise à Dakar : avec ces coordonnées, le joueur voit le
-    # terrain sur une carte et peut lancer un itinéraire.
+    # Position GPS exacte du terrain, obligatoire à la création (voir
+    # TerrainCreateUpdateSerializer). L'adresse écrite est souvent imprécise
+    # à Dakar : avec ces coordonnées, le joueur voit le terrain sur une
+    # carte et peut lancer un itinéraire. Nullable seulement pour les
+    # terrains créés avant que la position soit obligatoire.
     # 6 décimales = précision d'environ 10 cm, largement suffisant.
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
