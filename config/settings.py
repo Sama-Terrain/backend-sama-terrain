@@ -77,6 +77,10 @@ PAYTECH_API_KEY = config('PAYTECH_API_KEY', default='')
 PAYTECH_API_SECRET = config('PAYTECH_API_SECRET', default='')
 PAYTECH_BASE_URL = config('PAYTECH_BASE_URL', default='https://paytech.sn/api')
 
+# Versement de leur argent aux gérants (voir paiements/versements.py).
+# 'manuel' : l'admin envoie l'argent puis marque le retrait comme versé.
+MODE_VERSEMENT = config('MODE_VERSEMENT', default='manuel')
+
 # --- N8n (envoi des notifications email / WhatsApp) ---
 N8N_WEBHOOK_URL = config('N8N_WEBHOOK_URL', default='')
 

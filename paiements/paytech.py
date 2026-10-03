@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+
 import requests
 from django.conf import settings
 
@@ -59,3 +62,26 @@ def creer_demande_paiement(
         'payment_url': donnees.get('redirect_url'),
         'token': donnees.get('token'),
     }
+
+
+def ipn_authentique(donnees):
+    """
+    Vérifie qu'une notification IPN vient bien de PayTech : elle contient le
+    SHA-256 de l'API key et de l'API secret de la plateforme (champs
+    api_key_sha256 / api_secret_sha256). Sans cette vérification, n'importe
+    qui pourrait appeler l'IPN et faire confirmer une réservation (ou
+    activer un abonnement) sans avoir payé.
+    """
+    if not settings.PAYTECH_API_KEY or not settings.PAYTECH_API_SECRET:
+        return False
+    attendu_key = hashlib.sha256(settings.PAYTECH_API_KEY.encode()).hexdigest()
+    attendu_secret = hashlib.sha256(settings.PAYTECH_API_SECRET.encode()).hexdigest()
+    return (
+        hmac.compare_digest(str(donnees.get('api_key_sha256', '')), attendu_key)
+        and hmac.compare_digest(str(donnees.get('api_secret_sha256', '')), attendu_secret)
+    )
+
+
+def paiement_reussi(donnees):
+    """PayTech appelle aussi l'IPN quand le paiement est annulé ("sale_canceled")."""
+    return donnees.get('type_event', 'sale_complete') == 'sale_complete'

@@ -76,6 +76,9 @@ class Paiement(models.Model):
         AVANCE = 'avance', "Avance de réservation (PayTech)"
         SOLDE = 'solde', "Solde payé sur place"
         ABONNEMENT = 'abonnement', "Abonnement gérant (PayTech)"
+        # Avance rendue au joueur (annulation plus de 24h avant le match) :
+        # elle ne revient donc pas au gérant (voir portefeuille.py).
+        REMBOURSEMENT = 'remboursement', "Remboursement de l'avance (annulation)"
 
     type = models.CharField(max_length=15, choices=Type.choices)
 
@@ -95,3 +98,83 @@ class Paiement(models.Model):
 
     def __str__(self):
         return f"Paiement {self.type} - {self.montant} FCFA"
+
+
+class Operateur(models.TextChoices):
+    """Les comptes mobile money sur lesquels un gérant peut recevoir son argent."""
+    WAVE = 'wave', "Wave"
+    ORANGE_MONEY = 'orange_money', "Orange Money"
+
+
+class Portefeuille(models.Model):
+    """
+    Le "wallet" d'un gérant. Les avances payées par les joueurs arrivent
+    sur le compte PayTech de la plateforme ; la plateforme les doit ensuite
+    au gérant, qui les retire vers son numéro Wave ou Orange Money.
+
+    Le solde n'est PAS stocké ici : il est recalculé à partir des paiements
+    et des retraits (voir portefeuille.py), pour ne jamais être désynchronisé.
+    Ce modèle ne garde que le numéro sur lequel verser l'argent.
+    """
+
+    gerant = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='portefeuille',
+    )
+    operateur = models.CharField(max_length=15, choices=Operateur.choices)
+    # Format "221XXXXXXXXX", comme les autres téléphones de l'application.
+    numero = models.CharField(max_length=12)
+    mis_a_jour_le = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Portefeuille de {self.gerant.email} ({self.get_operateur_display()} {self.numero})"
+
+
+class Retrait(models.Model):
+    """
+    Une demande du gérant pour récupérer (une partie de) son solde.
+
+    Étape 1 (actuelle) : l'admin envoie l'argent lui-même depuis le compte
+    Wave/Orange Money de la plateforme, puis marque le retrait comme versé.
+    Étape 2 (plus tard) : une API de paiement sortant fera le versement ;
+    il suffira de brancher versements.py, ce modèle reste le même.
+    """
+
+    class Statut(models.TextChoices):
+        EN_ATTENTE = 'en_attente', "En attente de versement"
+        VERSE = 'verse', "Versé"
+        # Versement impossible (numéro erroné...) : le montant revient dans le solde.
+        ECHOUE = 'echoue', "Échoué"
+
+    class Methode(models.TextChoices):
+        MANUELLE = 'manuelle', "Versement manuel par l'admin"
+        AUTOMATIQUE = 'automatique', "Versement automatique (API)"
+
+    gerant = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='retraits')
+    montant = models.PositiveIntegerField()
+
+    # Copie du numéro au moment de la demande : si le gérant change de
+    # numéro ensuite, on sait toujours où l'argent a été envoyé.
+    operateur = models.CharField(max_length=15, choices=Operateur.choices)
+    numero = models.CharField(max_length=12)
+
+    statut = models.CharField(max_length=15, choices=Statut.choices, default=Statut.EN_ATTENTE)
+    methode = models.CharField(max_length=15, choices=Methode.choices, default=Methode.MANUELLE)
+
+    # Identifiant de la transaction Wave/Orange Money (saisi par l'admin à
+    # l'étape 1, renvoyé par l'API de versement à l'étape 2).
+    reference_transaction = models.CharField(max_length=100, blank=True)
+    motif_echec = models.CharField(max_length=255, blank=True)
+
+    cree_le = models.DateTimeField(auto_now_add=True)
+    traite_le = models.DateTimeField(null=True, blank=True)
+    traite_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+    )
+
+    class Meta:
+        ordering = ['-cree_le']
+
+    def __str__(self):
+        return f"Retrait {self.montant} FCFA - {self.gerant.email} ({self.statut})"

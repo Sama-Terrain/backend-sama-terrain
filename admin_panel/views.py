@@ -13,7 +13,9 @@ from avis.utils import recalculer_note_terrain
 from creneaux.models import Creneau
 from gerant.models import DemandeGerant
 from gerant.permissions import EstN8n
-from paiements.models import Abonnement, Paiement
+from paiements.models import Abonnement, Paiement, Retrait
+from paiements.serializers import RetraitSerializer
+from paiements.versements import confirmer_versement, marquer_echec
 from paiements.n8n import notifier_n8n
 from reservations.models import Reservation
 from terrains.models import Terrain
@@ -56,7 +58,8 @@ class AdminDashboardView(APIView):
 
     # get est un endpoint API qui permet de récupérer les statistiques globales de la plateforme pour l'espace admin.
     def get(self, request):
-        revenus_totaux = Paiement.objects.aggregate(total=Sum('montant'))['total'] or 0
+        revenus_totaux = Paiement.objects.exclude(type=Paiement.Type.REMBOURSEMENT).aggregate(
+            total=Sum('montant'))['total'] or 0
 
         return Response({
             'total_terrains': Terrain.objects.count(),
@@ -268,7 +271,7 @@ class AdminStatistiquesView(APIView):
 
         # --- Moyens de paiement (en %) ---
         paiements_par_mode = list(
-            Paiement.objects.exclude(moyen_paiement='')
+            Paiement.objects.exclude(moyen_paiement='').exclude(type=Paiement.Type.REMBOURSEMENT)
             .values('moyen_paiement')
             .annotate(total=Sum('montant'))
         )
@@ -777,3 +780,62 @@ class SignalementsN8nView(APIView):
         emails_admins = User.objects.filter(role='admin', is_active=True).values_list('email', flat=True)
 
         return Response({'signalements': signalements, 'emails_admins': list(emails_admins)})
+
+
+class AdminRetraitsListView(APIView):
+    """
+    GET /api/admin/retraits/?statut=en_attente
+
+    Les retraits demandés par les gérants. Étape 1 (versement manuel) :
+    l'admin envoie l'argent depuis le compte de la plateforme, puis les
+    marque comme versés (ou échoués) avec les deux routes ci-dessous.
+    """
+
+    permission_classes = [EstAdmin]
+
+    def get(self, request):
+        retraits = Retrait.objects.select_related('gerant')
+        statut = request.query_params.get('statut')
+        if statut:
+            retraits = retraits.filter(statut=statut)
+        return Response(RetraitSerializer(retraits[:200], many=True).data)
+
+
+class _TraiterRetraitView(APIView):
+    permission_classes = [EstAdmin]
+
+    def _retrait_en_attente(self, pk):
+        return Retrait.objects.filter(pk=pk, statut=Retrait.Statut.EN_ATTENTE).select_related('gerant').first()
+
+
+class AdminRetraitVerseView(_TraiterRetraitView):
+    """POST /api/admin/retraits/:id/verse/ {reference_transaction} -> argent envoyé au gérant."""
+
+    def post(self, request, pk):
+        retrait = self._retrait_en_attente(pk)
+        if retrait is None:
+            return Response({'detail': "Retrait introuvable ou déjà traité."}, status=status.HTTP_404_NOT_FOUND)
+
+        reference = str(request.data.get('reference_transaction', '')).strip()
+        if not reference:
+            return Response(
+                {'reference_transaction': ["Indiquez la référence de la transaction Wave / Orange Money."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        confirmer_versement(retrait, reference[:100], traite_par=request.user)
+        return Response(RetraitSerializer(retrait).data)
+
+
+class AdminRetraitEchecView(_TraiterRetraitView):
+    """POST /api/admin/retraits/:id/echec/ {motif} -> versement impossible, le montant revient au solde."""
+
+    def post(self, request, pk):
+        retrait = self._retrait_en_attente(pk)
+        if retrait is None:
+            return Response({'detail': "Retrait introuvable ou déjà traité."}, status=status.HTTP_404_NOT_FOUND)
+
+        motif = str(request.data.get('motif', '')).strip()
+        if not motif:
+            return Response({'motif': ["Indiquez le motif de l'échec."]}, status=status.HTTP_400_BAD_REQUEST)
+        marquer_echec(retrait, motif[:255], traite_par=request.user)
+        return Response(RetraitSerializer(retrait).data)

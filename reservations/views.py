@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from creneaux.models import Creneau
+from paiements.models import Paiement
 
 from .models import Commande, Reservation
 from .serializers import ReservationCreateSerializer, ReservationGroupeCreateSerializer, ReservationSerializer
@@ -162,6 +163,17 @@ class ReservationDetailView(APIView):
         # fait que calculer et renvoyer l'info : le vrai remboursement
         # d'argent se fera via PayTech dans l'app "paiements".
         remboursement = reservation.remboursement_possible()
+
+        # Avance déjà payée et remboursable : on le note dans l'historique,
+        # pour qu'elle ne soit pas comptée dans le solde du gérant (voir
+        # paiements/portefeuille.py). Le remboursement est fait par l'admin.
+        if remboursement and reservation.statut == Reservation.Statut.CONFIRMEE:
+            Paiement.objects.create(
+                type=Paiement.Type.REMBOURSEMENT,
+                reservation=reservation,
+                montant=reservation.montant_avance,
+                moyen_paiement=reservation.moyen_paiement,
+            )
 
         reservation.statut = Reservation.Statut.ANNULEE
         reservation.save()

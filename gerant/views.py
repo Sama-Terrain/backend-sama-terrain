@@ -11,7 +11,9 @@ from rest_framework.views import APIView
 
 from creneaux.models import Creneau
 from gerant.permissions import EstGerant, EstGerantAbonnementActif, EstN8n
-from paiements.models import PRIX_ABONNEMENT_MENSUEL, Abonnement, Paiement
+from paiements.models import PRIX_ABONNEMENT_MENSUEL, Abonnement, Paiement, Portefeuille, Retrait
+from paiements.portefeuille import RetraitRefuse, demander_retrait, etat_portefeuille
+from paiements.serializers import DemandeRetraitSerializer, PortefeuilleSerializer, RetraitSerializer
 from reservations.models import Reservation
 from reservations.serializers import ReservationSerializer
 from terrains.models import Terrain
@@ -52,7 +54,7 @@ class GerantDashboardView(APIView):
         revenus_mois = Paiement.objects.filter(
             reservation__creneau__terrain__in=terrains,
             cree_le__date__gte=debut_mois,
-        ).aggregate(total=Sum('montant'))['total'] or 0
+        ).exclude(type=Paiement.Type.REMBOURSEMENT).aggregate(total=Sum('montant'))['total'] or 0
 
         # On calcule le taux d'occupation des créneaux du mois en comparant le nombre de créneaux confirmés
         # avec le nombre total de créneaux pour les terrains du gérant, depuis le début du mois. Si aucun créneau n'est disponible, le taux d'occupation est de 0.
@@ -94,7 +96,10 @@ class GerantRevenusView(APIView):
     # par moyen de paiement, et l'historique détaillé des paiements 
     def get(self, request):
         terrains = Terrain.objects.filter(gerant=request.user)
-        paiements = Paiement.objects.filter(reservation__creneau__terrain__in=terrains)
+        # Un remboursement n'est pas un revenu (avance rendue au joueur).
+        paiements = Paiement.objects.filter(reservation__creneau__terrain__in=terrains).exclude(
+            type=Paiement.Type.REMBOURSEMENT
+        )
 
         # On calcule les dates importantes pour les statistiques : aujourd'hui, hier, 
         # le début du mois, il y a 30 jours et il y a 7 jours.
@@ -196,6 +201,54 @@ class GerantAbonnementView(APIView):
             'date_fin_abonnement': abonnement.date_fin_abonnement,
             'prix_mensuel': PRIX_ABONNEMENT_MENSUEL,
         })
+
+
+class PortefeuilleView(APIView):
+    """
+    GET /api/gerant/portefeuille/ -> solde, numéro de retrait, derniers retraits
+    PUT /api/gerant/portefeuille/ -> enregistre le numéro Wave / Orange Money
+
+    Accessible même avec un abonnement expiré : le gérant doit toujours
+    pouvoir récupérer l'argent qui lui revient.
+    """
+
+    permission_classes = [EstGerant]
+
+    def _reponse(self, gerant):
+        portefeuille = Portefeuille.objects.filter(gerant=gerant).first()
+        retraits = Retrait.objects.filter(gerant=gerant)[:20]
+        return Response({
+            **etat_portefeuille(gerant),
+            'numero_retrait': PortefeuilleSerializer(portefeuille).data if portefeuille else None,
+            'retraits': RetraitSerializer(retraits, many=True).data,
+        })
+
+    def get(self, request):
+        return self._reponse(request.user)
+
+    def put(self, request):
+        portefeuille = Portefeuille.objects.filter(gerant=request.user).first()
+        serializer = PortefeuilleSerializer(portefeuille, data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.save(gerant=request.user)
+        return self._reponse(request.user)
+
+
+class RetraitGerantView(APIView):
+    """POST /api/gerant/portefeuille/retraits/ -> demande de retrait d'un montant du solde."""
+
+    permission_classes = [EstGerant]
+
+    def post(self, request):
+        serializer = DemandeRetraitSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            retrait = demander_retrait(request.user, serializer.validated_data['montant'])
+        except RetraitRefuse as erreur:
+            return Response({'detail': str(erreur)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(RetraitSerializer(retrait).data, status=status.HTTP_201_CREATED)
 
 
 class GerantInsightsIAView(APIView):
@@ -348,7 +401,7 @@ def _chiffres_periode(terrains, debut, fin):
 
     revenus = Paiement.objects.filter(
         reservation__creneau__terrain__in=terrains, cree_le__date__range=(debut, fin)
-    ).aggregate(total=Sum('montant'))['total'] or 0
+    ).exclude(type=Paiement.Type.REMBOURSEMENT).aggregate(total=Sum('montant'))['total'] or 0
 
     total_creneaux = creneaux.count()
     creneaux_confirmes = creneaux.filter(statut=Creneau.Statut.CONFIRME).count()
