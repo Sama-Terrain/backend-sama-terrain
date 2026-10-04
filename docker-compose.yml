@@ -42,7 +42,7 @@ services:
     volumes:
       # Les fichiers uploadés (photos de terrains, documents gérants...)
       # survivent aux redémarrages du conteneur.
-      - media_data:/app/media
+      - ../media:/app/media
     depends_on:
       db:
         condition: service_healthy
