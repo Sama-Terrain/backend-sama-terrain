@@ -158,7 +158,8 @@ class ReservationDetailView(APIView):
         if reservation.statut == Reservation.Statut.ANNULEE:
             return Response({'detail': "Cette réservation est déjà annulée."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Règle métier : remboursement de l'avance si annulation > 24h avant
+        # Règle métier : remboursement de l'avance (moins les frais de
+        # transaction, à la charge du joueur) si annulation > 24h avant
         # le match, sinon l'avance est conservée par le gérant. Ici on ne
         # fait que calculer et renvoyer l'info : le vrai remboursement
         # d'argent se fera via PayTech dans l'app "paiements".
@@ -171,7 +172,7 @@ class ReservationDetailView(APIView):
             Paiement.objects.create(
                 type=Paiement.Type.REMBOURSEMENT,
                 reservation=reservation,
-                montant=reservation.montant_avance,
+                montant=reservation.montant_remboursable(),
                 moyen_paiement=reservation.moyen_paiement,
             )
 
@@ -186,7 +187,8 @@ class ReservationDetailView(APIView):
         return Response({
             'message': "Réservation annulée.",
             'remboursement_possible': remboursement,
-            'montant_rembourse': reservation.montant_avance if remboursement else 0,
+            'montant_rembourse': reservation.montant_remboursable(),
+            'frais_annulation': reservation.frais_annulation() if remboursement else 0,
         })
 
 
@@ -213,7 +215,8 @@ class PolitiqueAnnulationView(APIView):
 
         return Response({
             'remboursement_possible': remboursement,
-            'montant_rembourse': reservation.montant_avance if remboursement else 0,
+            'montant_rembourse': reservation.montant_remboursable(),
+            'frais_annulation': reservation.frais_annulation() if remboursement else 0,
         })
 
 

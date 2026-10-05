@@ -83,6 +83,17 @@ class PortefeuilleGerantTests(TestCase):
         self.assertTrue(Paiement.objects.filter(type=Paiement.Type.REMBOURSEMENT).exists())
         self.assertEqual(self._portefeuille()['a_venir'], 0)
 
+    @override_settings(FRAIS_TRANSACTION_POURCENT=2)
+    def test_frais_de_transaction_deduits_du_remboursement(self):
+        reservation = self._reservation_payee(timedelta(days=3))
+        client_joueur = APIClient()
+        client_joueur.force_authenticate(self.joueur)
+        reponse = client_joueur.delete(f'/api/reservations/{reservation.id}/')
+        self.assertEqual(reponse.data['frais_annulation'], 300)
+        self.assertEqual(reponse.data['montant_rembourse'], AVANCE - 300)
+        remboursement = Paiement.objects.get(type=Paiement.Type.REMBOURSEMENT)
+        self.assertEqual(remboursement.montant, AVANCE - 300)
+
     def test_numero_invalide_refuse(self):
         self.assertEqual(self._enregistrer_numero('123').status_code, 400)
 

@@ -77,6 +77,11 @@ PAYTECH_API_KEY = config('PAYTECH_API_KEY', default='')
 PAYTECH_API_SECRET = config('PAYTECH_API_SECRET', default='')
 PAYTECH_BASE_URL = config('PAYTECH_BASE_URL', default='https://paytech.sn/api')
 
+# Frais de transaction (PayTech / Wave / Orange Money), en % de l'avance,
+# laissés à la charge du joueur quand il annule : ils sont déduits de
+# l'avance remboursée (voir Reservation.frais_annulation).
+FRAIS_TRANSACTION_POURCENT = config('FRAIS_TRANSACTION_POURCENT', default=2, cast=float)
+
 # Versement de leur argent aux gérants (voir paiements/versements.py).
 # 'manuel' : l'admin envoie l'argent puis marque le retrait comme versé.
 MODE_VERSEMENT = config('MODE_VERSEMENT', default='manuel')
