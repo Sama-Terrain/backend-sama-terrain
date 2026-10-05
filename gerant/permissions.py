@@ -5,6 +5,8 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 
 from paiements.models import Abonnement
 
+from .equipe import proprietaire_de
+
 
 class EstGerant(IsAuthenticated):
     """Autorise uniquement les utilisateurs connectés avec le rôle 'gerant'."""
@@ -36,6 +38,29 @@ class EstGerantAbonnementActif(EstGerant):
         # On récupère l'abonnement du gérant connecté (ou on le crée s'il n'existe pas encore) et on vérifie s'il est actif.
         # le _ veut dire qu'on ne se soucie pas de la valeur retournée par get_or_create() (True si créé, False si existait déjà) : on veut juste l'objet Abonnement.
         abonnement, _ = Abonnement.objects.get_or_create(gerant=request.user)
+        return abonnement.est_actif
+
+
+class EstMembreEquipe(IsAuthenticated):
+    """
+    Le gérant propriétaire OU l'un de ses employés : pour le quotidien de
+    l'espace gérant (réservations, tickets, créneaux). Les pages liées à
+    l'argent et à l'abonnement restent réservées au propriétaire (EstGerant).
+    """
+
+    def has_permission(self, request, view):
+        return super().has_permission(request, view) and proprietaire_de(request.user) is not None
+
+
+class EstMembreEquipeAbonnementActif(EstMembreEquipe):
+    """Comme EstMembreEquipe, avec l'abonnement du PROPRIÉTAIRE en cours."""
+
+    message = EstGerantAbonnementActif.message
+
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        abonnement, _ = Abonnement.objects.get_or_create(gerant=proprietaire_de(request.user))
         return abonnement.est_actif
 
 

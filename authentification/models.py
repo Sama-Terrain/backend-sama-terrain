@@ -15,10 +15,12 @@ class User(AbstractUser):
     On ajoute juste ce qu'il nous manque : le rôle et la vérification email.
     """
 
-    # Les 3 rôles possibles sur la plateforme 
+    # Les rôles possibles sur la plateforme. Un "employé" travaille pour un
+    # gérant (propriétaire des terrains) : voir gerant.models.Employe.
     class Role(models.TextChoices):
         AMATEUR = 'amateur', 'Amateur'
         GERANT = 'gerant', 'Gérant'
+        EMPLOYE = 'employe', 'Employé'
         ADMIN = 'admin', 'Admin'
 
     # On rend l'email unique et obligatoire : c'est lui qui sert d'identifiant de connexion

@@ -4,6 +4,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from gerant.equipe import est_proprietaire_de, journaliser, proprietaire_de
+from gerant.models import JournalAction
+
 from .models import Ticket
 from .serializers import TicketSerializer, ValiderTicketSerializer
 
@@ -29,7 +32,7 @@ class TicketDetailView(APIView):
         # On vérifie que l'utilisateur connecté est soit l'amateur propriétaire de la réservation 
         # associée au ticket, soit le gérant du terrain concerné par le ticket.
         est_amateur = ticket.reservation.amateur_id == request.user.id
-        est_gerant = ticket.reservation.creneau.terrain.gerant_id == request.user.id
+        est_gerant = est_proprietaire_de(request.user, ticket.reservation.creneau.terrain.gerant_id)
 
         # Si l'utilisateur n'est ni l'amateur ni le gérant, on renvoie une réponse 403 (Accès refusé).
         if not (est_amateur or est_gerant):
@@ -55,8 +58,8 @@ class ValiderTicketView(APIView):
     # Si toutes les conditions sont remplies, le ticket est marqué comme utilisé et la date d'utilisation est enregistrée.
     # La réponse renvoie un message de succès et les détails du ticket validé.
     def post(self, request):
-        if request.user.role != 'gerant':
-            return Response({'detail': "Réservé aux gérants."}, status=status.HTTP_403_FORBIDDEN)
+        if proprietaire_de(request.user) is None:
+            return Response({'detail': "Réservé aux gérants et à leurs employés."}, status=status.HTTP_403_FORBIDDEN)
 
         # On utilise le serializer ValiderTicketSerializer pour valider le code du ticket fourni dans la requête.
         serializer = ValiderTicketSerializer(data=request.data, context={'request': request})
@@ -67,7 +70,15 @@ class ValiderTicketView(APIView):
         ticket = serializer.ticket
         ticket.utilise = True
         ticket.utilise_le = timezone.now()
+        ticket.valide_par = request.user
         ticket.save()
+
+        creneau = ticket.reservation.creneau
+        journaliser(
+            request.user, JournalAction.Action.TICKET_VALIDE,
+            f"Ticket de {ticket.reservation.nom_complet} validé ({creneau.terrain.nom}, "
+            f"{creneau.date.strftime('%d/%m')} à {creneau.heure_debut.strftime('%H:%M')})",
+        )
 
         return Response({
             'message': "Ticket validé.",

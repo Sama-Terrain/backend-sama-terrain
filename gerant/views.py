@@ -10,7 +10,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from creneaux.models import Creneau
-from gerant.permissions import EstGerant, EstGerantAbonnementActif, EstN8n
+from gerant.equipe import proprietaire_de
+from gerant.permissions import EstGerant, EstGerantAbonnementActif, EstMembreEquipe, EstN8n
 from paiements.models import PRIX_ABONNEMENT_MENSUEL, Abonnement, Paiement, Portefeuille, Retrait
 from paiements.portefeuille import RetraitRefuse, demander_retrait, etat_portefeuille
 from paiements.serializers import DemandeRetraitSerializer, PortefeuilleSerializer, RetraitSerializer
@@ -184,14 +185,15 @@ class GerantAbonnementView(APIView):
 
     Renvoie l'état de l'abonnement du gérant connecté (essai, actif, expiré),
     utilisé pour bloquer l'accès à l'espace gérant si nécessaire et pour
-    afficher la page "Abonnement".
+    afficher la page "Abonnement". Un employé peut le consulter (c'est
+    l'abonnement de son employeur qui lui ouvre l'accès), pas le payer.
     """
 
-    permission_classes = [EstGerant]
+    permission_classes = [EstMembreEquipe]
 
     # get est un endpoint API qui permet de récupérer l'état de l'abonnement du gérant connecté (essai, actif, expiré),
     def get(self, request):
-        abonnement, _ = Abonnement.objects.get_or_create(gerant=request.user)
+        abonnement, _ = Abonnement.objects.get_or_create(gerant=proprietaire_de(request.user))
 
         # On renvoie l'état de l'abonnement sous forme de dictionnaire JSON, avec le statut, 
         # la date de fin d'essai, la date de fin d'abonnement et le prix mensuel.    

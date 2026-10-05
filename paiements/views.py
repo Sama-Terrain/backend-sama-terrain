@@ -10,8 +10,10 @@ from rest_framework.views import APIView
 
 from authentification.models import User
 from creneaux.models import Creneau
+from gerant.equipe import journaliser
+from gerant.models import JournalAction
 from notifications.models import Notification
-from notifications.services import notifier
+from notifications.services import notifier, notifier_equipe
 from reservations.models import Commande, Reservation
 from tickets.models import Ticket
 
@@ -178,7 +180,7 @@ def _confirmer_reservation(reservation, moyen_paiement, transaction_id):
         'code_ticket': str(ticket.code),
     })
 
-    notifier(
+    notifier_equipe(
         creneau.terrain.gerant, Notification.Type.RESERVATION, 'Nouvelle réservation',
         f"{reservation.nom_complet} a réservé {creneau.terrain.nom} le {creneau.date.strftime('%d/%m')} "
         f"à {creneau.heure_debut.strftime('%H:%M')} (avance de {reservation.montant_avance} FCFA).",
@@ -494,11 +496,20 @@ class SoldeView(APIView):
 
         # On vérifie que la réservation appartient bien à l'amateur connecté, qu'elle est 
         # confirmée et qu'elle n'a pas encore été réglée.
+        moyen_paiement = serializer.validated_data['moyen_paiement']
         Paiement.objects.create(
             type=Paiement.Type.SOLDE,
             reservation=reservation,
             montant=reservation.reste_a_payer,
-            moyen_paiement=serializer.validated_data['moyen_paiement'],
+            moyen_paiement=moyen_paiement,
+            encaisse_par=request.user,
+        )
+
+        journaliser(
+            request.user, JournalAction.Action.SOLDE_ENCAISSE,
+            f"Solde de {reservation.reste_a_payer} FCFA encaissé "
+            f"({'espèces' if moyen_paiement == 'cash' else moyen_paiement.replace('_', ' ').title()}) "
+            f"pour la réservation de {reservation.nom_complet}",
         )
 
         return Response({'message': "Paiement du solde enregistré."}, status=status.HTTP_201_CREATED)

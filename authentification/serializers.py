@@ -22,12 +22,22 @@ class UserSerializer(serializers.ModelSerializer):
     Ne contient jamais le mot de passe.
     """
 
+    # Pour un employé : le gérant pour qui il travaille (None sinon).
+    equipe = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = [
             'id', 'email', 'prenom', 'nom', 'telephone', 'ville_preferee',
-            'role', 'email_verifie', 'date_joined',
+            'role', 'email_verifie', 'date_joined', 'equipe',
         ]
+
+    def get_equipe(self, user):
+        profil = getattr(user, 'profil_employe', None) if user.role == User.Role.EMPLOYE else None
+        if profil is None:
+            return None
+        proprietaire = profil.proprietaire
+        return {'proprietaire_id': proprietaire.id, 'proprietaire_nom': f"{proprietaire.prenom} {proprietaire.nom}"}
 
 
 class UpdateProfilSerializer(serializers.ModelSerializer):

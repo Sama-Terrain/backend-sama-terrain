@@ -10,6 +10,8 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
+from gerant.equipe import membres_equipe
+
 from .models import Notification
 
 # Les notifications déjà lues depuis plus longtemps que ça sont supprimées.
@@ -30,6 +32,21 @@ def notifier_admins(type, titre, message, lien=''):
     Notification.objects.bulk_create([
         Notification(destinataire=admin, type=type, titre=titre, message=message, lien=lien)
         for admin in admins
+    ])
+
+
+def notifier_equipe(proprietaire, type, titre, message, lien='', sauf=None):
+    """
+    Notifie le gérant propriétaire ET ses employés actifs (évènements du
+    quotidien : réservations, annulations). `sauf` : l'auteur de l'action,
+    qui n'a pas besoin d'être notifié de ce qu'il vient lui-même de faire.
+    """
+    membres = membres_equipe(proprietaire)
+    if sauf is not None:
+        membres = membres.exclude(pk=sauf.pk)
+    Notification.objects.bulk_create([
+        Notification(destinataire=membre, type=type, titre=titre, message=message, lien=lien)
+        for membre in membres
     ])
 
 

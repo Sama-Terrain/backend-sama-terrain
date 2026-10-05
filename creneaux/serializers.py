@@ -1,6 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 
+from gerant.equipe import est_proprietaire_de
 from terrains.models import Terrain
 
 from .models import Creneau
@@ -45,7 +46,7 @@ class CreneauCreateSerializer(serializers.ModelSerializer):
 
     def validate_terrain(self, terrain):
         request = self.context['request']
-        if terrain.gerant_id != request.user.id:
+        if not est_proprietaire_de(request.user, terrain.gerant_id):
             raise serializers.ValidationError("Ce terrain ne vous appartient pas.")
         return terrain
 

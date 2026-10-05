@@ -94,6 +94,12 @@ class Paiement(models.Model):
     moyen_paiement = models.CharField(max_length=30, blank=True)
     transaction_id = models.CharField(max_length=100, blank=True)
 
+    # Pour le solde payé sur place : qui a encaissé l'argent (le gérant ou
+    # l'un de ses employés). Vide pour les paiements en ligne (PayTech).
+    encaisse_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+    )
+
     cree_le = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

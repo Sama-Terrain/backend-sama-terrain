@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from creneaux.models import Creneau, adapter_portions_futures
+from gerant.equipe import proprietaire_de
 from notifications.models import Notification
 from notifications.services import notifier_admins
 
@@ -35,9 +36,11 @@ class TerrainListCreateView(APIView):
         mine = request.query_params.get('mine') == 'true'
 
         if mine:
-            if not request.user.is_authenticated or request.user.role != 'gerant':
+            # Un employé voit les terrains de son employeur.
+            proprietaire = proprietaire_de(request.user)
+            if proprietaire is None:
                 return Response({'detail': "Réservé aux gérants."}, status=status.HTTP_403_FORBIDDEN)
-            terrains = Terrain.objects.filter(gerant=request.user)
+            terrains = Terrain.objects.filter(gerant=proprietaire)
         else:
             terrains = Terrain.objects.filter(actif=True)
 

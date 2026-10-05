@@ -2,6 +2,8 @@ import re
 
 from rest_framework import serializers
 
+from gerant.equipe import est_proprietaire_de
+
 from .models import Portefeuille, Retrait
 
 from reservations.models import Commande, Reservation
@@ -55,7 +57,7 @@ class SoldeSerializer(serializers.Serializer):
 
     def validate_reservation(self, reservation):
         request = self.context['request']
-        if reservation.creneau.terrain.gerant_id != request.user.id:
+        if not est_proprietaire_de(request.user, reservation.creneau.terrain.gerant_id):
             raise serializers.ValidationError("Cette réservation ne concerne pas un de vos terrains.")
         if reservation.statut != Reservation.Statut.CONFIRMEE:
             raise serializers.ValidationError("Cette réservation n'est pas confirmée.")

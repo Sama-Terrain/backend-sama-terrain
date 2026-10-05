@@ -5,8 +5,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from creneaux.models import Creneau
+from gerant.equipe import est_proprietaire_de, journaliser, proprietaire_de
+from gerant.models import JournalAction
 from notifications.models import Notification
-from notifications.services import notifier
+from notifications.services import notifier_equipe
 from paiements.models import Paiement
 
 from .models import Commande, Reservation
@@ -127,7 +129,8 @@ class ReservationDetailView(APIView):
             return None
 
         est_amateur_proprietaire = reservation.amateur_id == request.user.id
-        est_gerant_proprietaire = reservation.creneau.terrain.gerant_id == request.user.id
+        # Le gérant du terrain ou l'un de ses employés.
+        est_gerant_proprietaire = est_proprietaire_de(request.user, reservation.creneau.terrain.gerant_id)
         if not (est_amateur_proprietaire or est_gerant_proprietaire):
             return 'interdit'
 
@@ -187,11 +190,21 @@ class ReservationDetailView(APIView):
         creneau.statut = Creneau.Statut.DISPONIBLE
         creneau.save()
 
-        notifier(
-            creneau.terrain.gerant, Notification.Type.ANNULATION, 'Réservation annulée',
-            f"{reservation.nom_complet} a annulé son créneau du {creneau.date.strftime('%d/%m')} "
-            f"à {creneau.heure_debut.strftime('%H:%M')} sur {creneau.terrain.nom}.",
-            f'/gerant/reservations?reservation={reservation.id}',
+        quand = f"du {creneau.date.strftime('%d/%m')} à {creneau.heure_debut.strftime('%H:%M')} sur {creneau.terrain.nom}"
+        if proprietaire_de(request.user) is not None:
+            # Annulée par le gérant ou un employé : on garde la trace de qui l'a fait.
+            auteur = f"{request.user.prenom} {request.user.nom}"
+            journaliser(
+                request.user, JournalAction.Action.RESERVATION_ANNULEE,
+                f"Réservation de {reservation.nom_complet} annulée (créneau {quand})",
+            )
+            message = f"{auteur} a annulé la réservation de {reservation.nom_complet} (créneau {quand})."
+        else:
+            message = f"{reservation.nom_complet} a annulé son créneau {quand}."
+
+        notifier_equipe(
+            creneau.terrain.gerant, Notification.Type.ANNULATION, 'Réservation annulée', message,
+            f'/gerant/reservations?reservation={reservation.id}', sauf=request.user,
         )
 
         # On renvoie le montant remboursé (0 si pas de remboursement) pour que le frontend puisse l'afficher à l'utilisateur.
@@ -243,7 +256,8 @@ class GerantReservationsView(APIView):
     # On ne peut pas utiliser un ModelViewSet ici, car on ne veut pas que le gérant puisse voir les réservations d'un autre gérant.
     # On ne peut pas non plus utiliser un ListAPIView, car on veut renvoyer un objet Reservation complet (avec le ticket, le terrain, etc.) plutôt qu'un simple ID.
     def get(self, request):
-        reservations = Reservation.objects.filter(creneau__terrain__gerant=request.user)
+        # Un employé voit les réservations des terrains de son employeur.
+        reservations = Reservation.objects.filter(creneau__terrain__gerant=proprietaire_de(request.user))
         liberer_les_expirees(reservations)
 
         return Response(ReservationSerializer(reservations, many=True, context={'request': request}).data)
