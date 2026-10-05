@@ -23,6 +23,8 @@ from .serializers import (
 )
 from .utils import generer_et_envoyer_code, generer_et_envoyer_code_reinitialisation
 from paiements.n8n import notifier_n8n
+from notifications.models import Notification
+from notifications.services import notifier_admins
 
 
 class RegisterView(APIView):
@@ -61,6 +63,11 @@ class RegisterView(APIView):
         user.save()
 
         generer_et_envoyer_code(user)
+
+        notifier_admins(
+            Notification.Type.INSCRIPTION, 'Nouveau joueur inscrit',
+            f"{user.prenom} {user.nom} a rejoint Sama-Terrain.", '/admin/utilisateurs',
+        )
 
         return Response(
             {
@@ -236,6 +243,12 @@ class DevenirGerantView(APIView):
             'nom_complexe': demande.nom_complexe,
             'quartier': demande.quartier,
         })
+
+        notifier_admins(
+            Notification.Type.ALERTE, 'Demande de gérant à valider',
+            f"{user.prenom} {user.nom} ({demande.nom_complexe}, {demande.quartier}) attend votre validation.",
+            '/admin/validation-gerants',
+        )
 
         return Response(
             {

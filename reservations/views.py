@@ -1,9 +1,12 @@
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from creneaux.models import Creneau
+from notifications.models import Notification
+from notifications.services import notifier
 from paiements.models import Paiement
 
 from .models import Commande, Reservation
@@ -177,11 +180,19 @@ class ReservationDetailView(APIView):
             )
 
         reservation.statut = Reservation.Statut.ANNULEE
+        reservation.annule_le = timezone.now()
         reservation.save()
 
         creneau = reservation.creneau
         creneau.statut = Creneau.Statut.DISPONIBLE
         creneau.save()
+
+        notifier(
+            creneau.terrain.gerant, Notification.Type.ANNULATION, 'Réservation annulée',
+            f"{reservation.nom_complet} a annulé son créneau du {creneau.date.strftime('%d/%m')} "
+            f"à {creneau.heure_debut.strftime('%H:%M')} sur {creneau.terrain.nom}.",
+            f'/gerant/reservations?reservation={reservation.id}',
+        )
 
         # On renvoie le montant remboursé (0 si pas de remboursement) pour que le frontend puisse l'afficher à l'utilisateur.
         return Response({

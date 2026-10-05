@@ -15,6 +15,8 @@ from django.db import transaction
 from django.db.models import Q, Sum
 from django.utils import timezone
 
+from notifications.models import Notification
+from notifications.services import notifier_admins
 from reservations.models import DELAI_REMBOURSEMENT_HEURES, Reservation
 
 from .models import Paiement, Portefeuille, Retrait
@@ -94,6 +96,13 @@ def demander_retrait(gerant, montant):
             operateur=portefeuille.operateur,
             numero=portefeuille.numero,
         )
+
+    notifier_admins(
+        Notification.Type.RETRAIT, 'Retrait à verser',
+        f"{gerant.prenom} {gerant.nom} demande un retrait de {retrait.montant} FCFA "
+        f"sur son {retrait.get_operateur_display()}.",
+        '/admin/retraits',
+    )
 
     lancer_versement(retrait)
     return retrait

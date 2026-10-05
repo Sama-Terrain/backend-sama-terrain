@@ -4,6 +4,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from creneaux.models import Creneau, adapter_portions_futures
+from notifications.models import Notification
+from notifications.services import notifier_admins
 
 from .models import Terrain, TerrainPhoto
 from .permissions import EstGerantOuLectureSeule, EstProprietaireDuTerrain
@@ -68,6 +70,12 @@ class TerrainListCreateView(APIView):
 
         terrain = serializer.save(gerant=request.user)
         self._enregistrer_photos(terrain, request)
+
+        notifier_admins(
+            Notification.Type.TERRAIN, 'Nouveau terrain',
+            f"« {terrain.nom} » a été ajouté par {request.user.prenom} {request.user.nom}.",
+            f'/admin/gerants/{request.user.id}',
+        )
 
         return Response(
             TerrainDetailSerializer(terrain, context={'request': request}).data,

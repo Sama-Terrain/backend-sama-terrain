@@ -548,3 +548,4 @@ class ChatbotView(APIView):
                 'texte': "Je recherche les meilleurs terrains disponibles pour vous. "
                          "Pouvez-vous préciser un quartier de Dakar ou une date ?",
             })
+

@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'avis',
     'gerant',
     'admin_panel',
+    'notifications',
 ]
 
 # On utilise notre propre modèle User (email au lieu de username, + rôle)
