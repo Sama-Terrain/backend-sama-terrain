@@ -15,7 +15,7 @@ from tickets.models import Ticket
 
 from .models import PRIX_ABONNEMENT_MENSUEL, Abonnement, Paiement
 from .n8n import notifier_n8n
-from .paytech import creer_demande_paiement
+from .paytech import creer_demande_paiement, ipn_authentique, paiement_reussi
 from .serializers import InitierPaiementGroupeSerializer, InitierPaiementSerializer, SoldeSerializer
 
 
@@ -194,6 +194,12 @@ class PaiementIPNView(APIView):
         # "RES-<id_reservation>-<timestamp>" pour une réservation seule, ou
         # "GRP-<id_commande>-<timestamp>" pour plusieurs créneaux payés
         # ensemble (voir InitierPaiementGroupeView).
+        if not ipn_authentique(request.data):
+            return Response({'detail': "Notification non authentifiée."}, status=status.HTTP_403_FORBIDDEN)
+
+        if not paiement_reussi(request.data):
+            return Response({'message': "Paiement annulé : rien à confirmer."}, status=status.HTTP_200_OK)
+
         ref_command = request.data.get('ref_command', '')
         moyen_paiement = request.data.get('payment_method', '')
         transaction_id = request.data.get('token', '')
@@ -268,6 +274,12 @@ class AbonnementIPNView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        if not ipn_authentique(request.data):
+            return Response({'detail': "Notification non authentifiée."}, status=status.HTTP_403_FORBIDDEN)
+
+        if not paiement_reussi(request.data):
+            return Response({'message': "Paiement annulé : rien à activer."}, status=status.HTTP_200_OK)
+
         ref_command = request.data.get('ref_command', '')
 
         # Le ref_command a la forme "ABO-<id_gerant>-<timestamp>".

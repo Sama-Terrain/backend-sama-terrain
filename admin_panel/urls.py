@@ -7,6 +7,9 @@ from .views import (
     AdminDashboardView,
     AdminGerantDetailView,
     AdminReservationsVilleView,
+    AdminRetraitEchecView,
+    AdminRetraitsListView,
+    AdminRetraitVerseView,
     AdminStatistiquesView,
     GerantsListView,
     MasquerAvisView,
@@ -36,4 +39,7 @@ urlpatterns = [
     path('avis/', AdminAvisListView.as_view(), name='admin-avis-list'),
     path('avis/<int:pk>/masquer/', MasquerAvisView.as_view(), name='admin-avis-masquer'),
     path('avis/<int:pk>/valider/', ValiderAvisView.as_view(), name='admin-avis-valider'),
+    path('retraits/', AdminRetraitsListView.as_view(), name='admin-retraits-list'),
+    path('retraits/<int:pk>/verse/', AdminRetraitVerseView.as_view(), name='admin-retrait-verse'),
+    path('retraits/<int:pk>/echec/', AdminRetraitEchecView.as_view(), name='admin-retrait-echec'),
 ]

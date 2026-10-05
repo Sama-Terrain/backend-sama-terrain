@@ -1,3 +1,4 @@
+import math
 from datetime import timedelta
 
 from django.conf import settings
@@ -128,6 +129,16 @@ class Reservation(models.Model):
     def remboursement_possible(self):
         """True si une annulation maintenant rembourserait l'avance (règle des 24h)."""
         return self.heures_avant_match() >= DELAI_REMBOURSEMENT_HEURES
+
+    def frais_annulation(self):
+        """Frais de transaction retenus sur l'avance quand le joueur annule (arrondis au FCFA supérieur)."""
+        return math.ceil(self.montant_avance * settings.FRAIS_TRANSACTION_POURCENT / 100)
+
+    def montant_remboursable(self):
+        """Ce que le joueur récupère s'il annule maintenant : l'avance moins les frais, ou 0 à moins de 24h."""
+        if not self.remboursement_possible():
+            return 0
+        return max(self.montant_avance - self.frais_annulation(), 0)
 
     def __str__(self):
         return f"Réservation {self.id} - {self.amateur.email} - {self.creneau}"

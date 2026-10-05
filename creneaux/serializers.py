@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import serializers
 
 from terrains.models import Terrain
@@ -47,6 +48,24 @@ class CreneauCreateSerializer(serializers.ModelSerializer):
         if terrain.gerant_id != request.user.id:
             raise serializers.ValidationError("Ce terrain ne vous appartient pas.")
         return terrain
+
+    def validate(self, data):
+        # Un créneau déjà commencé ne pourrait de toute façon jamais être réservé.
+        maintenant = timezone.localtime()
+        if data['date'] < maintenant.date() or (
+            data['date'] == maintenant.date() and data['heure_debut'] <= maintenant.time()
+        ):
+            raise serializers.ValidationError("Impossible de créer un créneau dans le passé.")
+
+        # `portion` n'étant pas un champ du serializer, DRF ne vérifie pas le
+        # unique_together du modèle : sans ce contrôle, un doublon ferait
+        # planter la base (IntegrityError -> erreur 500).
+        doublon = Creneau.objects.filter(
+            terrain=data['terrain'], date=data['date'], heure_debut=data['heure_debut'], portion=0,
+        ).exists()
+        if doublon:
+            raise serializers.ValidationError("Un créneau existe déjà à cette date et à cette heure pour ce terrain.")
+        return data
 
     def create(self, validated_data):
         # Le gérant crée le créneau du terrain complet ; pour un terrain

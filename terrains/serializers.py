@@ -69,7 +69,7 @@ class TerrainListSerializer(serializers.ModelSerializer):
         total = Paiement.objects.filter(
             reservation__creneau__terrain=terrain,
             cree_le__date__gte=debut_mois,
-        ).aggregate(total=Sum('montant'))['total'] #aggregate permet de calculer des valeurs agrégées (comme la somme, la moyenne, le maximum, etc.) sur un queryset. Ici, on calcule la somme des montants des paiements pour le terrain donné depuis le début du mois.
+        ).exclude(type=Paiement.Type.REMBOURSEMENT).aggregate(total=Sum('montant'))['total'] #aggregate permet de calculer des valeurs agrégées (comme la somme, la moyenne, le maximum, etc.) sur un queryset. Ici, on calcule la somme des montants des paiements pour le terrain donné depuis le début du mois.
         return total or 0
 
     def get_taux_occupation(self, terrain):

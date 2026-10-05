@@ -1,4 +1,8 @@
+import re
+
 from rest_framework import serializers
+
+from .models import Portefeuille, Retrait
 
 from reservations.models import Commande, Reservation
 
@@ -56,3 +60,41 @@ class SoldeSerializer(serializers.Serializer):
         if reservation.statut != Reservation.Statut.CONFIRMEE:
             raise serializers.ValidationError("Cette réservation n'est pas confirmée.")
         return reservation
+
+
+class PortefeuilleSerializer(serializers.ModelSerializer):
+    """Le numéro Wave / Orange Money sur lequel le gérant reçoit son argent."""
+
+    class Meta:
+        model = Portefeuille
+        fields = ['operateur', 'numero']
+
+    def validate_numero(self, value):
+        # Même règle que le téléphone du profil : mobile sénégalais, indicatif 221 inclus.
+        numero = re.sub(r'\D', '', value)
+        if not re.fullmatch(r'221(70|75|76|77|78)\d{7}', numero):
+            raise serializers.ValidationError(
+                "Numéro invalide : 9 chiffres commençant par 70, 75, 76, 77 ou 78."
+            )
+        return numero
+
+
+class RetraitSerializer(serializers.ModelSerializer):
+    operateur_libelle = serializers.CharField(source='get_operateur_display', read_only=True)
+    gerant_nom = serializers.SerializerMethodField()
+    gerant_email = serializers.EmailField(source='gerant.email', read_only=True)
+
+    class Meta:
+        model = Retrait
+        fields = [
+            'id', 'montant', 'operateur', 'operateur_libelle', 'numero', 'statut', 'methode',
+            'reference_transaction', 'motif_echec', 'cree_le', 'traite_le', 'gerant_nom', 'gerant_email',
+        ]
+        read_only_fields = fields
+
+    def get_gerant_nom(self, retrait):
+        return f"{retrait.gerant.prenom} {retrait.gerant.nom}".strip()
+
+
+class DemandeRetraitSerializer(serializers.Serializer):
+    montant = serializers.IntegerField(min_value=1)

@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from creneaux.models import Creneau
+from paiements.models import Paiement
 
 from .models import Commande, Reservation
 from .serializers import ReservationCreateSerializer, ReservationGroupeCreateSerializer, ReservationSerializer
@@ -157,11 +158,23 @@ class ReservationDetailView(APIView):
         if reservation.statut == Reservation.Statut.ANNULEE:
             return Response({'detail': "Cette réservation est déjà annulée."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Règle métier : remboursement de l'avance si annulation > 24h avant
+        # Règle métier : remboursement de l'avance (moins les frais de
+        # transaction, à la charge du joueur) si annulation > 24h avant
         # le match, sinon l'avance est conservée par le gérant. Ici on ne
         # fait que calculer et renvoyer l'info : le vrai remboursement
         # d'argent se fera via PayTech dans l'app "paiements".
         remboursement = reservation.remboursement_possible()
+
+        # Avance déjà payée et remboursable : on le note dans l'historique,
+        # pour qu'elle ne soit pas comptée dans le solde du gérant (voir
+        # paiements/portefeuille.py). Le remboursement est fait par l'admin.
+        if remboursement and reservation.statut == Reservation.Statut.CONFIRMEE:
+            Paiement.objects.create(
+                type=Paiement.Type.REMBOURSEMENT,
+                reservation=reservation,
+                montant=reservation.montant_remboursable(),
+                moyen_paiement=reservation.moyen_paiement,
+            )
 
         reservation.statut = Reservation.Statut.ANNULEE
         reservation.save()
@@ -174,7 +187,8 @@ class ReservationDetailView(APIView):
         return Response({
             'message': "Réservation annulée.",
             'remboursement_possible': remboursement,
-            'montant_rembourse': reservation.montant_avance if remboursement else 0,
+            'montant_rembourse': reservation.montant_remboursable(),
+            'frais_annulation': reservation.frais_annulation() if remboursement else 0,
         })
 
 
@@ -201,7 +215,8 @@ class PolitiqueAnnulationView(APIView):
 
         return Response({
             'remboursement_possible': remboursement,
-            'montant_rembourse': reservation.montant_avance if remboursement else 0,
+            'montant_rembourse': reservation.montant_remboursable(),
+            'frais_annulation': reservation.frais_annulation() if remboursement else 0,
         })
 
 
