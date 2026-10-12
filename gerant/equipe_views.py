@@ -1,12 +1,10 @@
-from urllib.parse import quote
-
-from django.conf import settings
 from django.core.mail import send_mail
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from authentification.models import User
+from authentification.utils import lien_activation_employe
 
 from .equipe import journaliser
 from .models import Employe, JournalAction
@@ -19,13 +17,15 @@ JOURNAL_MAX = 200
 
 def envoyer_invitation(employe):
     """
-    Email d'invitation : l'employé choisit lui-même son mot de passe via le
-    parcours "mot de passe oublié" (code à 6 chiffres). Le gérant ne connaît
-    donc jamais le mot de passe de ses employés, et chaque action du journal
-    est bien celle de la personne indiquée.
+    Email d'invitation : un lien sécurisé à usage unique où l'employé choisit
+    lui-même son mot de passe, puis arrive directement connecté dans son
+    espace (pas de code de vérification : recevoir le lien prouve déjà que
+    l'email est le sien). Le gérant ne connaît donc jamais le mot de passe de
+    ses employés, et chaque action du journal est bien celle de la personne
+    indiquée.
     """
     user, gerant = employe.user, employe.proprietaire
-    lien = f"{settings.FRONTEND_URL}/mot-de-passe-oublie?email={quote(user.email)}"
+    lien = lien_activation_employe(user)
     try:
         send_mail(
             subject="Votre accès employé Sama-Terrain",
@@ -33,11 +33,11 @@ def envoyer_invitation(employe):
                 f"Bonjour {user.prenom},\n\n"
                 f"{gerant.prenom} {gerant.nom} vous a ajouté(e) comme employé(e) sur Sama-Terrain "
                 "pour gérer ses terrains au quotidien (réservations, scan des tickets, créneaux).\n\n"
-                "Pour activer votre compte, choisissez votre mot de passe :\n"
-                f"1. Ouvrez ce lien : {lien}\n"
-                "2. Cliquez sur « Envoyer le code » : un code à 6 chiffres vous est envoyé par email.\n"
-                "3. Saisissez ce code et votre nouveau mot de passe (le code est valable 15 minutes).\n\n"
-                "Vous pourrez ensuite vous connecter avec votre adresse email."
+                "Pour activer votre compte, ouvrez ce lien et choisissez votre mot de passe :\n"
+                f"{lien}\n\n"
+                "Vous serez connecté(e) automatiquement. Ce lien est personnel, valable 3 jours "
+                "et utilisable une seule fois.\n\n"
+                "Ensuite, vous vous connecterez avec votre adresse email et ce mot de passe."
             ),
             from_email=None,
             recipient_list=[user.email],

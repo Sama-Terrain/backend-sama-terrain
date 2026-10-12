@@ -1,3 +1,4 @@
+import re
 from datetime import time, timedelta
 
 from django.core import mail
@@ -152,32 +153,74 @@ class EquipeGerantTests(TestCase):
         self.assertFalse(fatou.has_usable_password())
         self.assertEqual(fatou.profil_employe.proprietaire, self.gerant)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('/mot-de-passe-oublie?email=fatou%40test.sn', mail.outbox[0].body)
+        self.assertIn('/activer-compte?uid=', mail.outbox[0].body)
         self.assertTrue(JournalAction.objects.filter(action='employe_ajoute').exists())
 
         # Un email déjà utilisé est refusé.
         doublon = self.client_gerant.post('/api/gerant/employes/', {'prenom': 'A', 'nom': 'B', 'email': 'moussa@test.sn'})
         self.assertEqual(doublon.status_code, 400)
 
-    def test_parcours_complet_invitation_mot_de_passe_connexion(self):
+    def _inviter_fatou(self):
         self.client_gerant.post('/api/gerant/employes/', {'prenom': 'Fatou', 'nom': 'Sall', 'email': 'fatou@test.sn'})
+        uid, token = re.search(r'/activer-compte\?uid=([^&\s]+)&token=(\S+)', mail.outbox[-1].body).groups()
+        return uid, token
+
+    def test_parcours_complet_invitation_puis_connexion_automatique(self):
+        uid, token = self._inviter_fatou()
         anonyme = APIClient()
         # Sans mot de passe choisi, impossible de se connecter.
         self.assertEqual(anonyme.post('/api/auth/login', {'email': 'fatou@test.sn', 'password': 'x'}).status_code, 401)
 
-        # L'employée suit le lien de l'invitation : elle reçoit un code et choisit son mot de passe.
-        anonyme.post('/api/auth/mot-de-passe-oublie', {'email': 'fatou@test.sn'})
-        code = User.objects.get(email='fatou@test.sn').code_verification
-        anonyme.post('/api/auth/reinitialiser-mot-de-passe', {
-            'email': 'fatou@test.sn', 'code': code, 'nouveau_mot_de_passe': 'TerrainMermoz2026!',
-        })
+        # Le lien est reconnu : la page peut accueillir l'employée par son prénom.
+        accueil = anonyme.get('/api/auth/activer-compte', {'uid': uid, 'token': token})
+        self.assertEqual(accueil.status_code, 200)
+        self.assertEqual(accueil.data['prenom'], 'Fatou')
+        self.assertEqual(accueil.data['employeur'], f'Test {self.gerant.nom}')
 
+        # Elle choisit son mot de passe : aucun code à saisir, elle est connectée directement.
+        activation = anonyme.post('/api/auth/activer-compte', {
+            'uid': uid, 'token': token, 'nouveau_mot_de_passe': 'TerrainMermoz2026!',
+        })
+        self.assertEqual(activation.status_code, 200)
+        self.assertEqual(activation.data['role'], 'employe')
+        self.assertTrue(activation.data['user']['email_verifie'])
+        self.assertEqual(activation.data['user']['equipe']['proprietaire_id'], self.gerant.id)
+
+        session = APIClient()
+        session.credentials(HTTP_AUTHORIZATION=f"Bearer {activation.data['access']}")
+        self.assertEqual(session.get('/api/gerant/reservations/').status_code, 200)
+
+        # Plus tard, elle se reconnecte normalement avec son email et ce mot de passe.
         connexion = anonyme.post('/api/auth/login', {'email': 'fatou@test.sn', 'password': 'TerrainMermoz2026!'})
         self.assertEqual(connexion.status_code, 200)
-        self.assertEqual(connexion.data['role'], 'employe')
-        self.assertEqual(connexion.data['user']['equipe']['proprietaire_id'], self.gerant.id)
         employes = self.client_gerant.get('/api/gerant/employes/').data
         self.assertTrue(next(e for e in employes if e['email'] == 'fatou@test.sn')['invitation_acceptee'])
+
+    def test_lien_d_activation_a_usage_unique(self):
+        uid, token = self._inviter_fatou()
+        donnees = {'uid': uid, 'token': token, 'nouveau_mot_de_passe': 'TerrainMermoz2026!'}
+        self.assertEqual(APIClient().post('/api/auth/activer-compte', donnees).status_code, 200)
+        # Le même lien ne peut pas resservir (ex: transféré à quelqu'un d'autre).
+        donnees['nouveau_mot_de_passe'] = 'AutreMotDePasse2026!'
+        self.assertEqual(APIClient().post('/api/auth/activer-compte', donnees).status_code, 400)
+        self.assertEqual(APIClient().get('/api/auth/activer-compte', {'uid': uid, 'token': token}).status_code, 400)
+
+    def test_lien_refuse_si_invalide_ou_employe_desactive(self):
+        uid, token = self._inviter_fatou()
+        self.assertEqual(APIClient().get('/api/auth/activer-compte', {'uid': uid, 'token': 'faux-jeton'}).status_code, 400)
+
+        fatou = User.objects.get(email='fatou@test.sn')
+        self.client_gerant.patch(f'/api/gerant/employes/{fatou.id}/', {'actif': False}, format='json')
+        reponse = APIClient().post('/api/auth/activer-compte', {
+            'uid': uid, 'token': token, 'nouveau_mot_de_passe': 'TerrainMermoz2026!',
+        })
+        self.assertEqual(reponse.status_code, 400)
+
+    def test_mot_de_passe_trop_faible_refuse(self):
+        uid, token = self._inviter_fatou()
+        reponse = APIClient().post('/api/auth/activer-compte', {'uid': uid, 'token': token, 'nouveau_mot_de_passe': '123'})
+        self.assertEqual(reponse.status_code, 400)
+        self.assertIn('nouveau_mot_de_passe', reponse.data)
 
     def test_employe_desactive_ne_peut_plus_se_connecter(self):
         client_jwt = APIClient()

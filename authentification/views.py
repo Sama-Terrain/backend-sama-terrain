@@ -8,6 +8,8 @@ from rest_framework.parsers import FormParser, MultiPartParser
 
 from .models import User
 from .serializers import (
+    MESSAGE_LIEN_ACTIVATION_INVALIDE,
+    ActiverCompteEmployeSerializer,
     ChangerMotDePasseSerializer,
     DevenirGerantSerializer,
     GoogleAuthSerializer,
@@ -21,7 +23,7 @@ from .serializers import (
     UserSerializer,
     VerifyEmailSerializer,
 )
-from .utils import generer_et_envoyer_code, generer_et_envoyer_code_reinitialisation
+from .utils import employe_depuis_lien, generer_et_envoyer_code, generer_et_envoyer_code_reinitialisation
 from paiements.n8n import notifier_n8n
 from notifications.models import Notification
 from notifications.services import notifier_admins
@@ -323,3 +325,32 @@ class ReinitialiserMotDePasseView(APIView):
 
         serializer.save()
         return Response({'message': "Mot de passe réinitialisé avec succès."})
+
+
+class ActiverCompteView(APIView):
+    """
+    GET  /api/auth/activer-compte?uid=...&token=... -> vérifie le lien d'invitation
+         d'un employé et renvoie de quoi l'accueillir (prénom, employeur).
+    POST /api/auth/activer-compte -> {uid, token, nouveau_mot_de_passe} : définit
+         son mot de passe et le connecte directement (renvoie {access, refresh, role, user}).
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        user = employe_depuis_lien(request.query_params.get('uid'), request.query_params.get('token'))
+        if user is None:
+            return Response({'detail': MESSAGE_LIEN_ACTIVATION_INVALIDE}, status=status.HTTP_400_BAD_REQUEST)
+
+        employeur = user.profil_employe.proprietaire
+        return Response({
+            'prenom': user.prenom,
+            'email': user.email,
+            'employeur': f"{employeur.prenom} {employeur.nom}",
+        })
+
+    def post(self, request):
+        serializer = ActiverCompteEmployeSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.save(), status=status.HTTP_200_OK)

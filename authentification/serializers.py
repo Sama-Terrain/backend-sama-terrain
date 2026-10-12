@@ -2,7 +2,9 @@ import re
 from datetime import timedelta
 
 from django.conf import settings
+from django.contrib.auth.models import update_last_login
 from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
@@ -14,6 +16,7 @@ from gerant.models import DemandeGerant
 from paiements.models import Abonnement
 
 from .models import User
+from .utils import employe_depuis_lien
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -458,3 +461,52 @@ class ReinitialiserMotDePasseSerializer(serializers.Serializer):
         self.user.code_verification = None
         self.user.code_verification_envoye_le = None
         self.user.save()
+
+
+MESSAGE_LIEN_ACTIVATION_INVALIDE = (
+    "Ce lien d'activation est invalide, a expiré ou a déjà été utilisé. "
+    "Demandez à votre gérant de vous renvoyer l'invitation."
+)
+
+
+class ActiverCompteEmployeSerializer(serializers.Serializer):
+    """
+    POST /api/auth/activer-compte : l'employé invité par son gérant choisit son
+    mot de passe depuis le lien reçu par email. Son email est déjà considéré
+    comme vérifié (le lien n'arrive que dans sa boîte mail) et il est
+    connecté directement : la réponse a la même forme qu'une connexion.
+    """
+
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    nouveau_mot_de_passe = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        user = employe_depuis_lien(data['uid'], data['token'])
+        if user is None:
+            raise serializers.ValidationError(MESSAGE_LIEN_ACTIVATION_INVALIDE)
+
+        try:
+            validate_password(data['nouveau_mot_de_passe'], user)
+        except DjangoValidationError as erreur:
+            raise serializers.ValidationError({'nouveau_mot_de_passe': list(erreur.messages)})
+
+        self.user = user
+        return data
+
+    def save(self):
+        user = self.user
+        # Le lien devient inutilisable dès que le mot de passe change (le jeton
+        # Django dépend du mot de passe actuel) : il ne sert qu'une fois.
+        user.set_password(self.validated_data['nouveau_mot_de_passe'])
+        user.email_verifie = True
+        user.save()
+        update_last_login(None, user)
+
+        refresh = RefreshToken.for_user(user)
+        return {
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'role': user.role,
+            'user': UserSerializer(user).data,
+        }

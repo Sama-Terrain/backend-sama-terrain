@@ -1,7 +1,13 @@
 import random
 
+from django.conf import settings
+from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.utils import timezone
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+
+from .models import User
 
 
 def generer_et_envoyer_code(user):
@@ -72,3 +78,36 @@ def generer_et_envoyer_code_reinitialisation(user):
         )
     except Exception as erreur:
         print(f"Erreur lors de l'envoi de l'email à {user.email} : {erreur}")
+
+
+# --- Activation du compte d'un employé (invitation envoyée par son gérant) ---
+#
+# Lien sécurisé à usage unique, sans code à recopier : le jeton est signé par
+# Django (même mécanique que la réinitialisation de mot de passe de Django) et
+# devient invalide dès que l'employé a choisi son mot de passe. Il expire
+# après PASSWORD_RESET_TIMEOUT (3 jours par défaut).
+
+def lien_activation_employe(user):
+    """URL du frontend où l'employé choisit son mot de passe."""
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+    return f"{settings.FRONTEND_URL}/activer-compte?uid={uid}&token={token}"
+
+
+def employe_depuis_lien(uid, token):
+    """
+    L'employé correspondant à un lien d'activation, ou None si le lien est
+    invalide, expiré, déjà utilisé ou si le compte a été désactivé.
+    """
+    if not uid or not token:
+        return None
+    try:
+        user = User.objects.get(pk=force_str(urlsafe_base64_decode(uid)))
+    except (User.DoesNotExist, ValueError, TypeError, OverflowError):
+        return None
+
+    if user.role != User.Role.EMPLOYE or not user.is_active:
+        return None
+    if not default_token_generator.check_token(user, token):
+        return None
+    return user
