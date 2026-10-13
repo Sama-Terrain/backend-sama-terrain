@@ -1,7 +1,9 @@
+from django.contrib.auth.models import update_last_login
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -21,6 +23,7 @@ from .serializers import (
     ResendCodeSerializer,
     UpdateProfilSerializer,
     UserSerializer,
+    VerifierCodeReinitialisationSerializer,
     VerifyEmailSerializer,
 )
 from .utils import employe_depuis_lien, generer_et_envoyer_code, generer_et_envoyer_code_reinitialisation
@@ -85,7 +88,10 @@ class VerifyEmailView(APIView):
     POST /api/auth/verify-email
 
     Reçoit {email, code}. Si le code est bon et pas expiré, on marque
-    le compte comme vérifié : l'utilisateur peut désormais se connecter.
+    le compte comme vérifié et on connecte directement l'utilisateur
+    (renvoie {access, refresh, role, user}, comme la connexion). Exception :
+    un gérant dont la demande n'est pas encore validée (compte inactif)
+    reçoit seulement le message.
     """
 
     permission_classes = [AllowAny]
@@ -103,9 +109,20 @@ class VerifyEmailView(APIView):
         user.email_verifie = True
         user.code_verification = None
         user.code_verification_envoye_le = None
+        user.tentatives_code = 0
         user.save()
 
-        return Response({'message': "Email vérifié avec succès."}, status=status.HTTP_200_OK)
+        reponse = {'message': "Email vérifié avec succès."}
+        if user.is_active:
+            update_last_login(None, user)
+            refresh = RefreshToken.for_user(user)
+            reponse.update({
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+                'role': user.role,
+                'user': UserSerializer(user).data,
+            })
+        return Response(reponse, status=status.HTTP_200_OK)
 
 
 class ResendCodeView(APIView):
@@ -307,13 +324,32 @@ class MotDePasseOublieView(APIView):
         })
 
 
+class VerifierCodeReinitialisationView(APIView):
+    """
+    POST /api/auth/verifier-code-reinitialisation
+
+    Reçoit {email, code}. "Mot de passe oublié", étape 2 : indique seulement si
+    le code est bon, pour passer à l'étape du nouveau mot de passe.
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = VerifierCodeReinitialisationSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'message': "Code valide."})
+
+
 class ReinitialiserMotDePasseView(APIView):
     """
     POST /api/auth/reinitialiser-mot-de-passe
 
     Reçoit {email, code, nouveau_mot_de_passe}. Si le code est bon et pas
-    expiré, définit le nouveau mot de passe : l'utilisateur peut alors se
-    reconnecter normalement avec son email.
+    expiré, définit le nouveau mot de passe et connecte directement
+    l'utilisateur (renvoie {access, refresh, role, user}, comme la connexion).
+    Exception : un compte pas encore activé (ex: gérant en attente de
+    validation) n'est pas connecté, il reçoit seulement le message.
     """
 
     permission_classes = [AllowAny]
@@ -323,8 +359,19 @@ class ReinitialiserMotDePasseView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer.save()
-        return Response({'message': "Mot de passe réinitialisé avec succès."})
+        user = serializer.save()
+        reponse = {'message': "Mot de passe réinitialisé avec succès."}
+
+        if user.is_active:
+            update_last_login(None, user)
+            refresh = RefreshToken.for_user(user)
+            reponse.update({
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+                'role': user.role,
+                'user': UserSerializer(user).data,
+            })
+        return Response(reponse)
 
 
 class ActiverCompteView(APIView):

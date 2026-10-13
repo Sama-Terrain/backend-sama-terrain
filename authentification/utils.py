@@ -1,4 +1,5 @@
 import random
+from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
@@ -24,6 +25,7 @@ def generer_et_envoyer_code(user):
 
     user.code_verification = code
     user.code_verification_envoye_le = timezone.now()
+    user.tentatives_code = 0
     user.save()
 
     # Le compte est déjà créé/sauvegardé à ce stade : si l'envoi échoue
@@ -48,6 +50,38 @@ def generer_et_envoyer_code(user):
         print(f"Erreur lors de l'envoi de l'email à {user.email} : {erreur}")
 
 
+# Un code (vérification d'email ou réinitialisation) est valable 15 minutes
+# et accepte au plus 5 essais faux.
+DUREE_VALIDITE_CODE = timedelta(minutes=15)
+TENTATIVES_CODE_MAX = 5
+
+
+def verifier_code(user, code):
+    """
+    Vérifie le code à 6 chiffres saisi par `user`. Renvoie None s'il est bon,
+    sinon le message d'erreur à afficher. Chaque code faux est compté : au
+    5e essai raté, le code est effacé et il faut en demander un nouveau.
+    """
+    if not user.code_verification:
+        return "Aucun code en cours : demandez un nouveau code."
+
+    if timezone.now() > user.code_verification_envoye_le + DUREE_VALIDITE_CODE:
+        return "Ce code a expiré, demandez-en un nouveau."
+
+    if user.code_verification != code:
+        user.tentatives_code += 1
+        restantes = TENTATIVES_CODE_MAX - user.tentatives_code
+        if restantes <= 0:
+            user.code_verification = None
+            user.code_verification_envoye_le = None
+            user.save(update_fields=['tentatives_code', 'code_verification', 'code_verification_envoye_le'])
+            return "Trop de codes incorrects : ce code n'est plus valable, demandez-en un nouveau."
+        user.save(update_fields=['tentatives_code'])
+        return f"Code incorrect. Il vous reste {restantes} essai{'s' if restantes > 1 else ''}."
+
+    return None
+
+
 def generer_et_envoyer_code_reinitialisation(user):
     """
     Même mécanique que generer_et_envoyer_code (code à 6 chiffres, 15 min de
@@ -62,6 +96,7 @@ def generer_et_envoyer_code_reinitialisation(user):
 
     user.code_verification = code
     user.code_verification_envoye_le = timezone.now()
+    user.tentatives_code = 0
     user.save()
 
     try:

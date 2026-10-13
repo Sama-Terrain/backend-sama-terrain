@@ -53,6 +53,10 @@ class User(AbstractUser):
     # Date d'envoi du dernier code, pour savoir s'il a expiré.
     code_verification_envoye_le = models.DateTimeField(blank=True, null=True)
 
+    # Nombre de codes faux saisis pour le code en cours : au-delà de 5, le code
+    # est invalidé (empêche de deviner le code en essayant toutes les combinaisons).
+    tentatives_code = models.PositiveSmallIntegerField(default=0)
+
     # On dit à Django : "connecte-toi avec l'email", pas avec le username.
     USERNAME_FIELD = 'email'
 
