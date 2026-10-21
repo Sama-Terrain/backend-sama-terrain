@@ -84,6 +84,10 @@ class Reservation(models.Model):
 
     cree_le = models.DateTimeField(auto_now_add=True)
 
+    # Date à laquelle le joueur a annulé (vide sinon) : sert à dater la
+    # notification "réservation annulée" envoyée au gérant.
+    annule_le = models.DateTimeField(null=True, blank=True)
+
     # Calculé à la création : cree_le + 15 minutes. Passé ce délai, si le
     # statut est toujours EN_ATTENTE, la réservation est considérée expirée.
     expire_le = models.DateTimeField()

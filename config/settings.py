@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'avis',
     'gerant',
     'admin_panel',
+    'notifications',
 ]
 
 # On utilise notre propre modèle User (email au lieu de username, + rôle)
@@ -99,6 +100,10 @@ IA_SERVICE_URL = config('IA_SERVICE_URL', default='http://127.0.0.1:8001')
 # URL du frontend, utilisée pour construire les liens de redirection
 # après paiement (success_url / cancel_url envoyés à PayTech).
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+
+# Durée de validité du lien d'activation envoyé à un employé invité par son
+# gérant (voir authentification.utils.lien_activation_employe) : 3 jours.
+PASSWORD_RESET_TIMEOUT = 3 * 24 * 60 * 60
 
 # Autorise le frontend (autre origine : port différent) à appeler cette API
 # depuis le navigateur. Sans ça, le navigateur bloque les requêtes (erreur CORS).
@@ -206,7 +211,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+# Messages d'erreur par défaut (Django, DRF, SimpleJWT, validateurs de mot
+# de passe...) en français : ce sont eux que le frontend affiche tels quels.
+LANGUAGE_CODE = 'fr'
 
 TIME_ZONE = 'UTC'
 

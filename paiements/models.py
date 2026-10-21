@@ -4,7 +4,7 @@ from django.utils import timezone
 
 from reservations.models import Reservation
 
-PRIX_ABONNEMENT_MENSUEL = 7500  # FCFA, montant fixe de la spec
+PRIX_ABONNEMENT_MENSUEL = 40000  # FCFA par mois
 
 
 class Abonnement(models.Model):
@@ -13,7 +13,7 @@ class Abonnement(models.Model):
 
     Cycle de vie : à l'inscription, en attente de validation par l'admin.
     Une fois validé -> 7 jours d'essai gratuit. Après l'essai -> le gérant
-    doit payer 7 500 FCFA/mois (voir AbonnementInitierView plus bas) pour
+    doit payer 40 000 FCFA/mois (voir AbonnementInitierView plus bas) pour
     garder l'accès actif.
     """
 
@@ -93,6 +93,12 @@ class Paiement(models.Model):
     montant = models.PositiveIntegerField()
     moyen_paiement = models.CharField(max_length=30, blank=True)
     transaction_id = models.CharField(max_length=100, blank=True)
+
+    # Pour le solde payé sur place : qui a encaissé l'argent (le gérant ou
+    # l'un de ses employés). Vide pour les paiements en ligne (PayTech).
+    encaisse_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+    )
 
     cree_le = models.DateTimeField(auto_now_add=True)
 

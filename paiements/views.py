@@ -10,6 +10,10 @@ from rest_framework.views import APIView
 
 from authentification.models import User
 from creneaux.models import Creneau
+from gerant.equipe import journaliser
+from gerant.models import JournalAction
+from notifications.models import Notification
+from notifications.services import notifier, notifier_equipe
 from reservations.models import Commande, Reservation
 from tickets.models import Ticket
 
@@ -176,6 +180,13 @@ def _confirmer_reservation(reservation, moyen_paiement, transaction_id):
         'code_ticket': str(ticket.code),
     })
 
+    notifier_equipe(
+        creneau.terrain.gerant, Notification.Type.RESERVATION, 'Nouvelle réservation',
+        f"{reservation.nom_complet} a réservé {creneau.terrain.nom} le {creneau.date.strftime('%d/%m')} "
+        f"à {creneau.heure_debut.strftime('%H:%M')} (avance de {reservation.montant_avance} FCFA).",
+        f'/gerant/reservations?reservation={reservation.id}',
+    )
+
 
 class PaiementIPNView(APIView):
     """
@@ -234,7 +245,7 @@ class AbonnementInitierView(APIView):
     POST /api/paiements/abonnement/initier/
 
     Crée une demande de paiement PayTech pour l'abonnement mensuel
-    (7 500 FCFA) du gérant connecté.
+    (40 000 FCFA) du gérant connecté.
     """
 
     permission_classes = [IsAuthenticated]
@@ -328,6 +339,12 @@ class AbonnementIPNView(APIView):
             'email_gerant': abonnement.gerant.email,
             'date_fin_abonnement': str(abonnement.date_fin_abonnement),
         })
+
+        notifier(
+            abonnement.gerant, Notification.Type.ABONNEMENT, 'Abonnement activé',
+            f"Votre abonnement est actif jusqu'au {timezone.localtime(abonnement.date_fin_abonnement).strftime('%d/%m/%Y')}.",
+            '/gerant/abonnement',
+        )
 
         return Response({'message': "Abonnement activé."}, status=status.HTTP_200_OK)
 
@@ -440,6 +457,13 @@ class AlertesExpirationAbonnementView(APIView):
                 'date_fin': str(date_fin),
             })
 
+            notifier(
+                abonnement.gerant, Notification.Type.ALERTE, 'Abonnement bientôt expiré',
+                f"Votre {'essai gratuit' if abonnement.statut == Abonnement.Statut.ESSAI else 'abonnement'} se termine le "
+                f"{timezone.localtime(date_fin).strftime('%d/%m à %H:%M')}. Renouvelez-le pour garder l'accès.",
+                '/gerant/abonnement',
+            )
+
             # On marque l'abonnement comme "alerte envoyée" pour ne pas renvoyer l'alerte à nouveau.
             abonnement.alerte_expiration_envoyee = True
             abonnement.save(update_fields=['alerte_expiration_envoyee'])
@@ -472,11 +496,20 @@ class SoldeView(APIView):
 
         # On vérifie que la réservation appartient bien à l'amateur connecté, qu'elle est 
         # confirmée et qu'elle n'a pas encore été réglée.
+        moyen_paiement = serializer.validated_data['moyen_paiement']
         Paiement.objects.create(
             type=Paiement.Type.SOLDE,
             reservation=reservation,
             montant=reservation.reste_a_payer,
-            moyen_paiement=serializer.validated_data['moyen_paiement'],
+            moyen_paiement=moyen_paiement,
+            encaisse_par=request.user,
+        )
+
+        journaliser(
+            request.user, JournalAction.Action.SOLDE_ENCAISSE,
+            f"Solde de {reservation.reste_a_payer} FCFA encaissé "
+            f"({'espèces' if moyen_paiement == 'cash' else moyen_paiement.replace('_', ' ').title()}) "
+            f"pour la réservation de {reservation.nom_complet}",
         )
 
         return Response({'message': "Paiement du solde enregistré."}, status=status.HTTP_201_CREATED)

@@ -27,6 +27,7 @@ class ReservationSerializer(serializers.ModelSerializer):
     libelle_portion = serializers.CharField(source='creneau.libelle_portion', read_only=True)
     reste_a_payer = serializers.IntegerField(read_only=True)
     ticket = serializers.SerializerMethodField()
+    solde_encaisse = serializers.SerializerMethodField()
 
     class Meta:
         model = Reservation
@@ -35,7 +36,7 @@ class ReservationSerializer(serializers.ModelSerializer):
             'montant_avance', 'montant_total', 'reste_a_payer',
             'moyen_paiement', 'transaction_id', 'cree_le',
             'terrain_id', 'terrain_nom', 'terrain_image', 'date', 'heure_debut', 'heure_fin',
-            'libelle_portion', 'ticket',
+            'libelle_portion', 'ticket', 'solde_encaisse',
         ]
 
     def get_terrain_image(self, reservation):
@@ -57,7 +58,26 @@ class ReservationSerializer(serializers.ModelSerializer):
         ticket = getattr(reservation, 'ticket', None) #getattr() est utilisé pour récupérer l'attribut 'ticket' de l'objet reservation. Si l'attribut n'existe pas, il renvoie None au lieu de lever une exception. Cela permet de gérer les cas où la réservation n'a pas encore de ticket associé (par exemple, si le paiement n'a pas été confirmé).
         if ticket is None:
             return None
-        return {'id': ticket.id, 'code': str(ticket.code), 'utilise': ticket.utilise}
+        return {
+            'id': ticket.id, 'code': str(ticket.code), 'utilise': ticket.utilise,
+            'utilise_le': ticket.utilise_le,
+            # Qui a scanné le ticket : le gérant ou l'un de ses employés.
+            'valide_par': _nom(ticket.valide_par),
+        }
+
+    def get_solde_encaisse(self, reservation):
+        # Le solde payé sur place, et qui l'a encaissé (traçabilité de la caisse).
+        solde = reservation.paiements.filter(type='solde').select_related('encaisse_par').first()
+        if solde is None:
+            return None
+        return {
+            'montant': solde.montant, 'moyen_paiement': solde.moyen_paiement,
+            'encaisse_par': _nom(solde.encaisse_par), 'le': solde.cree_le,
+        }
+
+
+def _nom(user):
+    return f"{user.prenom} {user.nom}" if user else None
 
 
 MONTANT_AVANCE_MINIMUM = 10000

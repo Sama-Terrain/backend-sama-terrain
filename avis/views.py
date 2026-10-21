@@ -3,6 +3,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from notifications.models import Notification
+from notifications.services import notifier, notifier_admins
 from reservations.models import Reservation
 from terrains.models import Terrain
 
@@ -98,6 +100,11 @@ class AvisCreateView(APIView):
         avis = serializer.save()
         recalculer_note_terrain(avis.terrain)
 
+        notifier(
+            avis.terrain.gerant, Notification.Type.AVIS, f'Nouvel avis ({avis.note}/5)',
+            f"Un joueur a laissé un avis sur {avis.terrain.nom}.", f'/gerant/terrains/{avis.terrain_id}',
+        )
+
         return Response(AvisSerializer(avis).data, status=status.HTTP_201_CREATED)
 
 
@@ -116,7 +123,16 @@ class SignalerAvisView(APIView):
         if avis is None:
             return Response({'detail': "Avis introuvable."}, status=status.HTTP_404_NOT_FOUND)
 
+        deja_signale = avis.signale
         avis.signale = True
         avis.save()
+
+        # Un seul rappel aux admins, même si l'avis est signalé plusieurs fois.
+        if not deja_signale:
+            notifier_admins(
+                Notification.Type.ALERTE, 'Avis signalé',
+                f"Un avis sur « {avis.terrain.nom} » a été signalé et attend une modération.",
+                '/admin/moderation-avis',
+            )
 
         return Response({'message': "Avis signalé, il sera examiné par un administrateur."})

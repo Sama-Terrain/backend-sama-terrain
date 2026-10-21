@@ -4,6 +4,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from gerant.equipe import journaliser
+from gerant.models import JournalAction
 from terrains.models import Terrain
 
 from .models import Creneau
@@ -64,6 +66,7 @@ class CreneauCreateView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         creneau = serializer.save()
+        journaliser(request.user, JournalAction.Action.CRENEAUX_CREES, cible=creneau.terrain.nom)
         return Response(CreneauSerializer(creneau).data, status=status.HTTP_201_CREATED)
 
 
@@ -99,6 +102,7 @@ class CreneauDetailView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         creneau = serializer.save()
+        journaliser(request.user, JournalAction.Action.CRENEAUX_MODIFIES, cible=creneau.terrain.nom)
         return Response(CreneauSerializer(creneau).data)
 
     def delete(self, request, pk):
@@ -123,6 +127,7 @@ class CreneauDetailView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        journaliser(request.user, JournalAction.Action.CRENEAUX_SUPPRIMES, cible=creneau.terrain.nom)
         portions.delete()
         creneau.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -156,5 +161,6 @@ class CreneauPrixDynamiqueView(APIView):
 
         creneau.prix = creneau.prix_recommande_ia
         creneau.save()
+        journaliser(request.user, JournalAction.Action.CRENEAUX_MODIFIES, cible=creneau.terrain.nom)
 
         return Response(CreneauSerializer(creneau).data)

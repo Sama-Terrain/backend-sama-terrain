@@ -15,10 +15,12 @@ class User(AbstractUser):
     On ajoute juste ce qu'il nous manque : le rôle et la vérification email.
     """
 
-    # Les 3 rôles possibles sur la plateforme 
+    # Les rôles possibles sur la plateforme. Un "employé" travaille pour un
+    # gérant (propriétaire des terrains) : voir gerant.models.Employe.
     class Role(models.TextChoices):
         AMATEUR = 'amateur', 'Amateur'
         GERANT = 'gerant', 'Gérant'
+        EMPLOYE = 'employe', 'Employé'
         ADMIN = 'admin', 'Admin'
 
     # On rend l'email unique et obligatoire : c'est lui qui sert d'identifiant de connexion
@@ -50,6 +52,10 @@ class User(AbstractUser):
 
     # Date d'envoi du dernier code, pour savoir s'il a expiré.
     code_verification_envoye_le = models.DateTimeField(blank=True, null=True)
+
+    # Nombre de codes faux saisis pour le code en cours : au-delà de 5, le code
+    # est invalidé (empêche de deviner le code en essayant toutes les combinaisons).
+    tentatives_code = models.PositiveSmallIntegerField(default=0)
 
     # On dit à Django : "connecte-toi avec l'email", pas avec le username.
     USERNAME_FIELD = 'email'

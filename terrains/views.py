@@ -4,6 +4,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from creneaux.models import Creneau, adapter_portions_futures
+from gerant.equipe import proprietaire_de
+from notifications.models import Notification
+from notifications.services import notifier_admins
 
 from .models import Terrain, TerrainPhoto
 from .permissions import EstGerantOuLectureSeule, EstProprietaireDuTerrain
@@ -33,9 +36,11 @@ class TerrainListCreateView(APIView):
         mine = request.query_params.get('mine') == 'true'
 
         if mine:
-            if not request.user.is_authenticated or request.user.role != 'gerant':
+            # Un employé voit les terrains de son employeur.
+            proprietaire = proprietaire_de(request.user)
+            if proprietaire is None:
                 return Response({'detail': "Réservé aux gérants."}, status=status.HTTP_403_FORBIDDEN)
-            terrains = Terrain.objects.filter(gerant=request.user)
+            terrains = Terrain.objects.filter(gerant=proprietaire)
         else:
             terrains = Terrain.objects.filter(actif=True)
 
@@ -68,6 +73,12 @@ class TerrainListCreateView(APIView):
 
         terrain = serializer.save(gerant=request.user)
         self._enregistrer_photos(terrain, request)
+
+        notifier_admins(
+            Notification.Type.TERRAIN, 'Nouveau terrain',
+            f"« {terrain.nom} » a été ajouté par {request.user.prenom} {request.user.nom}.",
+            f'/admin/gerants/{request.user.id}',
+        )
 
         return Response(
             TerrainDetailSerializer(terrain, context={'request': request}).data,

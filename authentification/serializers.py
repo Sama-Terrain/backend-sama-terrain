@@ -1,9 +1,9 @@
 import re
-from datetime import timedelta
 
 from django.conf import settings
+from django.contrib.auth.models import update_last_login
 from django.contrib.auth.password_validation import validate_password
-from django.utils import timezone
+from django.core.exceptions import ValidationError as DjangoValidationError
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from rest_framework import serializers
@@ -14,6 +14,7 @@ from gerant.models import DemandeGerant
 from paiements.models import Abonnement
 
 from .models import User
+from .utils import employe_depuis_lien, verifier_code
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -22,12 +23,22 @@ class UserSerializer(serializers.ModelSerializer):
     Ne contient jamais le mot de passe.
     """
 
+    # Pour un employé : le gérant pour qui il travaille (None sinon).
+    equipe = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = [
             'id', 'email', 'prenom', 'nom', 'telephone', 'ville_preferee',
-            'role', 'email_verifie', 'date_joined',
+            'role', 'email_verifie', 'date_joined', 'equipe',
         ]
+
+    def get_equipe(self, user):
+        profil = getattr(user, 'profil_employe', None) if user.role == User.Role.EMPLOYE else None
+        if profil is None:
+            return None
+        proprietaire = profil.proprietaire
+        return {'proprietaire_id': proprietaire.id, 'proprietaire_nom': f"{proprietaire.prenom} {proprietaire.nom}"}
 
 
 class UpdateProfilSerializer(serializers.ModelSerializer):
@@ -134,14 +145,10 @@ class VerifyEmailSerializer(serializers.Serializer):
         if user.email_verifie:
             raise serializers.ValidationError({'email': "Cet email est déjà vérifié."})
 
-        if user.code_verification != data['code']:
-            raise serializers.ValidationError({'code': "Code de vérification incorrect."})
-
-        # Le code n'est valable que 15 minutes après son envoi.
-        #timedelta est une classe du module datetime qui représente une durée, ici de 15 minutes.
-        expire = user.code_verification_envoye_le + timedelta(minutes=15)
-        if timezone.now() > expire:
-            raise serializers.ValidationError({'code': "Ce code a expiré, demandez-en un nouveau."})
+        # Code bon, pas expiré, et au plus 5 essais faux (voir utils.verifier_code).
+        erreur = verifier_code(user, data['code'])
+        if erreur:
+            raise serializers.ValidationError({'code': erreur})
 
         # On transmet l'utilisateur trouvé à la vue, pour éviter de le
         # rechercher une deuxième fois.
@@ -410,10 +417,32 @@ class MotDePasseOublieSerializer(serializers.Serializer):
         return value
 
 
+class VerifierCodeReinitialisationSerializer(serializers.Serializer):
+    """
+    Utilisé pour POST /api/auth/verifier-code-reinitialisation : "Mot de passe
+    oublié", étape 2. Vérifie seulement le code reçu par email, pour passer à
+    l'étape du nouveau mot de passe (comme dans la plupart des applications).
+    """
+
+    email = serializers.EmailField()
+    code = serializers.CharField(max_length=6)
+
+    def validate(self, data):
+        user = User.objects.filter(email__iexact=data['email']).first()
+        if user is None:
+            raise serializers.ValidationError({'email': "Aucun compte avec cet email."})
+
+        erreur = verifier_code(user, data['code'])
+        if erreur:
+            raise serializers.ValidationError({'code': erreur})
+        return data
+
+
 class ReinitialiserMotDePasseSerializer(serializers.Serializer):
     """
-    Utilisé pour POST /api/auth/reinitialiser-mot-de-passe : vérifie le code
-    reçu par email puis définit le nouveau mot de passe.
+    Utilisé pour POST /api/auth/reinitialiser-mot-de-passe : "Mot de passe
+    oublié", étape 3. Revérifie le code (l'API ne doit pas faire confiance à
+    l'étape 2 du navigateur) puis définit le nouveau mot de passe.
     """
 
     # on ne crée/modifie pas un User directement à partir des données : on doit 
@@ -428,12 +457,9 @@ class ReinitialiserMotDePasseSerializer(serializers.Serializer):
         except User.DoesNotExist:
             raise serializers.ValidationError({'email': "Aucun compte avec cet email."})
 
-        if not user.code_verification or user.code_verification != data['code']:
-            raise serializers.ValidationError({'code': "Code invalide."})
-
-        expire = user.code_verification_envoye_le + timedelta(minutes=15)
-        if timezone.now() > expire:
-            raise serializers.ValidationError({'code': "Ce code a expiré, demandez-en un nouveau."})
+        erreur = verifier_code(user, data['code'])
+        if erreur:
+            raise serializers.ValidationError({'code': erreur})
 
         self.user = user
         return data
@@ -447,4 +473,57 @@ class ReinitialiserMotDePasseSerializer(serializers.Serializer):
         # servir à réinitialiser le mot de passe une seconde fois.
         self.user.code_verification = None
         self.user.code_verification_envoye_le = None
+        self.user.tentatives_code = 0
+        # Le code reçu par email prouve que l'adresse est bien la sienne.
+        self.user.email_verifie = True
         self.user.save()
+        return self.user
+
+
+MESSAGE_LIEN_ACTIVATION_INVALIDE = (
+    "Ce lien d'activation est invalide, a expiré ou a déjà été utilisé. "
+    "Demandez à votre gérant de vous renvoyer l'invitation."
+)
+
+
+class ActiverCompteEmployeSerializer(serializers.Serializer):
+    """
+    POST /api/auth/activer-compte : l'employé invité par son gérant choisit son
+    mot de passe depuis le lien reçu par email. Son email est déjà considéré
+    comme vérifié (le lien n'arrive que dans sa boîte mail) et il est
+    connecté directement : la réponse a la même forme qu'une connexion.
+    """
+
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    nouveau_mot_de_passe = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        user = employe_depuis_lien(data['uid'], data['token'])
+        if user is None:
+            raise serializers.ValidationError(MESSAGE_LIEN_ACTIVATION_INVALIDE)
+
+        try:
+            validate_password(data['nouveau_mot_de_passe'], user)
+        except DjangoValidationError as erreur:
+            raise serializers.ValidationError({'nouveau_mot_de_passe': list(erreur.messages)})
+
+        self.user = user
+        return data
+
+    def save(self):
+        user = self.user
+        # Le lien devient inutilisable dès que le mot de passe change (le jeton
+        # Django dépend du mot de passe actuel) : il ne sert qu'une fois.
+        user.set_password(self.validated_data['nouveau_mot_de_passe'])
+        user.email_verifie = True
+        user.save()
+        update_last_login(None, user)
+
+        refresh = RefreshToken.for_user(user)
+        return {
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'role': user.role,
+            'user': UserSerializer(user).data,
+        }

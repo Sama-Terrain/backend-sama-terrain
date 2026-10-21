@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.db import models
 
 from reservations.models import Reservation
@@ -21,6 +22,10 @@ class Ticket(models.Model):
 
     utilise = models.BooleanField(default=False)
     utilise_le = models.DateTimeField(null=True, blank=True)
+    # Qui a scanné le ticket à l'entrée (le gérant ou l'un de ses employés).
+    valide_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+    )
 
     cree_le = models.DateTimeField(auto_now_add=True)
 

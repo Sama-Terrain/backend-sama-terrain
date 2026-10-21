@@ -55,7 +55,7 @@ Le service IA (FastAPI) tourne dans son **propre conteneur**, lit la même base 
 ## Les 3 rôles de la plateforme
 
 - **Amateur** : joueur qui recherche et réserve un terrain, paie une avance en ligne (Wave/Orange Money via PayTech), reçoit un ticket QR, laisse un avis après avoir joué.
-- **Gérant** : propriétaire de terrain. Doit être validé par un admin après inscription, bénéficie de **7 jours d'essai gratuit**, puis paie un abonnement de **7 500 FCFA/mois** pour garder l'accès à son espace (dashboard, gestion des créneaux/tarifs, revenus). Accès automatiquement suspendu si l'abonnement expire sans renouvellement.
+- **Gérant** : propriétaire de terrain. Doit être validé par un admin après inscription, bénéficie de **7 jours d'essai gratuit**, puis paie un abonnement de **40 000 FCFA/mois** pour garder l'accès à son espace (dashboard, gestion des créneaux/tarifs, revenus). Accès automatiquement suspendu si l'abonnement expire sans renouvellement.
 - **Administrateur** : supervise la plateforme, valide/rejette les demandes de gérant, modère les avis, consulte le détail complet de chaque gérant (terrains, revenus, abonnement, paiements).
 
 ## Organisation du code (apps Django)

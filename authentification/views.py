@@ -1,13 +1,17 @@
+from django.contrib.auth.models import update_last_login
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from rest_framework.parsers import FormParser, MultiPartParser
 
 from .models import User
 from .serializers import (
+    MESSAGE_LIEN_ACTIVATION_INVALIDE,
+    ActiverCompteEmployeSerializer,
     ChangerMotDePasseSerializer,
     DevenirGerantSerializer,
     GoogleAuthSerializer,
@@ -19,10 +23,13 @@ from .serializers import (
     ResendCodeSerializer,
     UpdateProfilSerializer,
     UserSerializer,
+    VerifierCodeReinitialisationSerializer,
     VerifyEmailSerializer,
 )
-from .utils import generer_et_envoyer_code, generer_et_envoyer_code_reinitialisation
+from .utils import employe_depuis_lien, generer_et_envoyer_code, generer_et_envoyer_code_reinitialisation
 from paiements.n8n import notifier_n8n
+from notifications.models import Notification
+from notifications.services import notifier_admins
 
 
 class RegisterView(APIView):
@@ -62,6 +69,11 @@ class RegisterView(APIView):
 
         generer_et_envoyer_code(user)
 
+        notifier_admins(
+            Notification.Type.INSCRIPTION, 'Nouveau joueur inscrit',
+            f"{user.prenom} {user.nom} a rejoint Sama-Terrain.", '/admin/utilisateurs',
+        )
+
         return Response(
             {
                 'message': "Compte créé. Un code de vérification a été envoyé par email.",
@@ -76,7 +88,10 @@ class VerifyEmailView(APIView):
     POST /api/auth/verify-email
 
     Reçoit {email, code}. Si le code est bon et pas expiré, on marque
-    le compte comme vérifié : l'utilisateur peut désormais se connecter.
+    le compte comme vérifié et on connecte directement l'utilisateur
+    (renvoie {access, refresh, role, user}, comme la connexion). Exception :
+    un gérant dont la demande n'est pas encore validée (compte inactif)
+    reçoit seulement le message.
     """
 
     permission_classes = [AllowAny]
@@ -94,9 +109,20 @@ class VerifyEmailView(APIView):
         user.email_verifie = True
         user.code_verification = None
         user.code_verification_envoye_le = None
+        user.tentatives_code = 0
         user.save()
 
-        return Response({'message': "Email vérifié avec succès."}, status=status.HTTP_200_OK)
+        reponse = {'message': "Email vérifié avec succès."}
+        if user.is_active:
+            update_last_login(None, user)
+            refresh = RefreshToken.for_user(user)
+            reponse.update({
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+                'role': user.role,
+                'user': UserSerializer(user).data,
+            })
+        return Response(reponse, status=status.HTTP_200_OK)
 
 
 class ResendCodeView(APIView):
@@ -237,6 +263,12 @@ class DevenirGerantView(APIView):
             'quartier': demande.quartier,
         })
 
+        notifier_admins(
+            Notification.Type.ALERTE, 'Demande de gérant à valider',
+            f"{user.prenom} {user.nom} ({demande.nom_complexe}, {demande.quartier}) attend votre validation.",
+            '/admin/validation-gerants',
+        )
+
         return Response(
             {
                 'message': (
@@ -292,13 +324,32 @@ class MotDePasseOublieView(APIView):
         })
 
 
+class VerifierCodeReinitialisationView(APIView):
+    """
+    POST /api/auth/verifier-code-reinitialisation
+
+    Reçoit {email, code}. "Mot de passe oublié", étape 2 : indique seulement si
+    le code est bon, pour passer à l'étape du nouveau mot de passe.
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = VerifierCodeReinitialisationSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'message': "Code valide."})
+
+
 class ReinitialiserMotDePasseView(APIView):
     """
     POST /api/auth/reinitialiser-mot-de-passe
 
     Reçoit {email, code, nouveau_mot_de_passe}. Si le code est bon et pas
-    expiré, définit le nouveau mot de passe : l'utilisateur peut alors se
-    reconnecter normalement avec son email.
+    expiré, définit le nouveau mot de passe et connecte directement
+    l'utilisateur (renvoie {access, refresh, role, user}, comme la connexion).
+    Exception : un compte pas encore activé (ex: gérant en attente de
+    validation) n'est pas connecté, il reçoit seulement le message.
     """
 
     permission_classes = [AllowAny]
@@ -308,5 +359,45 @@ class ReinitialiserMotDePasseView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer.save()
-        return Response({'message': "Mot de passe réinitialisé avec succès."})
+        user = serializer.save()
+        reponse = {'message': "Mot de passe réinitialisé avec succès."}
+
+        if user.is_active:
+            update_last_login(None, user)
+            refresh = RefreshToken.for_user(user)
+            reponse.update({
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+                'role': user.role,
+                'user': UserSerializer(user).data,
+            })
+        return Response(reponse)
+
+
+class ActiverCompteView(APIView):
+    """
+    GET  /api/auth/activer-compte?uid=...&token=... -> vérifie le lien d'invitation
+         d'un employé et renvoie de quoi l'accueillir (prénom, employeur).
+    POST /api/auth/activer-compte -> {uid, token, nouveau_mot_de_passe} : définit
+         son mot de passe et le connecte directement (renvoie {access, refresh, role, user}).
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        user = employe_depuis_lien(request.query_params.get('uid'), request.query_params.get('token'))
+        if user is None:
+            return Response({'detail': MESSAGE_LIEN_ACTIVATION_INVALIDE}, status=status.HTTP_400_BAD_REQUEST)
+
+        employeur = user.profil_employe.proprietaire
+        return Response({
+            'prenom': user.prenom,
+            'email': user.email,
+            'employeur': f"{employeur.prenom} {employeur.nom}",
+        })
+
+    def post(self, request):
+        serializer = ActiverCompteEmployeSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.save(), status=status.HTTP_200_OK)

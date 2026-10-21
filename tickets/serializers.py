@@ -1,6 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 
+from gerant.equipe import est_proprietaire_de
 from reservations.models import Reservation
 
 from .models import Ticket
@@ -52,7 +53,7 @@ class ValiderTicketSerializer(serializers.Serializer):
 
         # On vérifie que le ticket appartient bien à un de nos terrains (le gérant connecté est bien le propriétaire du terrain).
         request = self.context['request']
-        if ticket.reservation.creneau.terrain.gerant_id != request.user.id:
+        if not est_proprietaire_de(request.user, ticket.reservation.creneau.terrain.gerant_id):
             raise serializers.ValidationError("Ce ticket ne concerne pas un de vos terrains.")
 
         if ticket.utilise:

@@ -17,6 +17,8 @@ from paiements.models import Abonnement, Paiement, Retrait
 from paiements.serializers import RetraitSerializer
 from paiements.versements import confirmer_versement, marquer_echec
 from paiements.n8n import notifier_n8n
+from notifications.models import Notification
+from notifications.services import notifier
 from reservations.models import Reservation
 from terrains.models import Terrain
 
@@ -604,6 +606,13 @@ class ValiderGerantView(APIView):
             'date_fin_essai': str(abonnement.date_fin_essai.date()),
         })
 
+        notifier(
+            demande.user, Notification.Type.ABONNEMENT, 'Compte validé',
+            f"Bienvenue sur Sama-Terrain ! Votre essai gratuit de {DUREE_ESSAI_JOURS} jours se termine le "
+            f"{timezone.localtime(abonnement.date_fin_essai).strftime('%d/%m/%Y')}.",
+            '/gerant/abonnement',
+        )
+
         return Response({'message': "Gérant validé. Compte activé avec 7 jours d'essai gratuit."})
 
 
@@ -839,3 +848,4 @@ class AdminRetraitEchecView(_TraiterRetraitView):
             return Response({'motif': ["Indiquez le motif de l'échec."]}, status=status.HTTP_400_BAD_REQUEST)
         marquer_echec(retrait, motif[:255], traite_par=request.user)
         return Response(RetraitSerializer(retrait).data)
+
