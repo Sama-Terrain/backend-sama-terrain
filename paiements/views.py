@@ -245,7 +245,7 @@ class AbonnementInitierView(APIView):
     POST /api/paiements/abonnement/initier/
 
     Crée une demande de paiement PayTech pour l'abonnement mensuel
-    (7 500 FCFA) du gérant connecté.
+    (40 000 FCFA) du gérant connecté.
     """
 
     permission_classes = [IsAuthenticated]
